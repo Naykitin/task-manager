@@ -15,7 +15,9 @@
     {
       "binding": "DB",
       "database_name": "task-manager-db",
-      "database_id": "dd542bec-8e0a-4932-b0b9-784abf489ce4",
+      // Replace with the database_id printed by `wrangler d1 create task-manager-db`
+      // (see README "Deploy to Cloudflare").
+      "database_id": "REPLACE_WITH_YOUR_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }
   ],

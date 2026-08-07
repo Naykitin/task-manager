@@ -1,0 +1,9 @@
+# Local development secrets (loaded automatically by `wrangler dev` / vite dev).
+# Copy this file to `.dev.vars` and fill in your own values — `.dev.vars` is
+# gitignored and NOT used in production.
+#
+# Generate a JWT_SECRET with:
+#   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+
+JWT_SECRET=replace-with-a-long-random-string
+INVITE_CODE=letmein

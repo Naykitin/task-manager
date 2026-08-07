@@ -76,8 +76,15 @@ npm install
 
 ## 2. Local development
 
-Local secrets live in `.dev.vars` (already created with dev defaults —
-`INVITE_CODE="letmein"`). Create the local D1 database and apply the schema:
+Local secrets live in `.dev.vars` (gitignored, never committed). Copy the
+example and fill in your own values:
+
+```bash
+cp .dev.vars.example .dev.vars
+```
+
+The example ships with `INVITE_CODE=letmein`; change it to whatever you like.
+Create the local D1 database and apply the schema:
 
 ```bash
 npm run db:local          # wrangler d1 execute task-manager-db --local --file=./schema.sql
@@ -136,3 +143,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
   other paid add-ons.
 - **Registration** is gated by `INVITE_CODE`, so even though the Worker URL is
   public, nobody can create an account without the code.
+
+## License
+
+[MIT](LICENSE) — fork it, deploy your own instance, do what you want with it.
