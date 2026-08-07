@@ -19,6 +19,8 @@ import { ColumnView } from "./ColumnView.tsx";
 import { TaskModal } from "./TaskModal.tsx";
 import { TimeLogModal } from "./TimeLogModal.tsx";
 
+const LAST_BOARD_KEY = "tm_last_board_id";
+
 function findContainerId(
   columns: ColumnWithTasks[],
   id: string,
@@ -85,10 +87,11 @@ export function BoardView() {
         const { boards } = await api.listBoards();
         if (cancelled) return;
         setBoards(boards);
-        const first = boards[0];
-        if (first) {
-          setCurrentBoardId(first.id);
-          await loadBoard(first.id);
+        const savedId = localStorage.getItem(LAST_BOARD_KEY);
+        const target = boards.find((b) => b.id === savedId) ?? boards[0];
+        if (target) {
+          setCurrentBoardId(target.id);
+          await loadBoard(target.id);
         }
       } catch (e) {
         if (!cancelled)
@@ -104,6 +107,7 @@ export function BoardView() {
 
   async function switchBoard(boardId: string) {
     setCurrentBoardId(boardId);
+    localStorage.setItem(LAST_BOARD_KEY, boardId);
     setLoading(true);
     try {
       await loadBoard(boardId);
@@ -212,6 +216,7 @@ export function BoardView() {
         await switchBoard(remaining[0].id);
       } else {
         setCurrentBoardId(null);
+        localStorage.removeItem(LAST_BOARD_KEY);
         setColumns([]);
       }
     });
