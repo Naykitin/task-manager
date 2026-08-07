@@ -86,6 +86,15 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (a === "tasks" && b && c === "time-entries" && method === "GET") {
     return timer.listTimeEntries(b, userId, env);
   }
+  if (a === "tasks" && b && c === "time-entries" && method === "POST") {
+    return timer.createManualEntry(req, b, userId, env);
+  }
+
+  // ---- Time entries (direct edit/delete by id) ----
+  if (a === "time-entries" && b && !c) {
+    if (method === "PATCH") return timer.updateTimeEntry(req, b, userId, env);
+    if (method === "DELETE") return timer.deleteTimeEntry(b, userId, env);
+  }
 
   // ---- Timesheet ----
   if (a === "timesheet" && !b && method === "GET") {

@@ -415,7 +415,11 @@ export function BoardView() {
         />
       )}
       {historyTask && (
-        <TimeLogModal task={historyTask} onClose={() => setHistoryTask(null)} />
+        <TimeLogModal
+          task={historyTask}
+          onClose={() => setHistoryTask(null)}
+          onChange={reload}
+        />
       )}
     </div>
   );

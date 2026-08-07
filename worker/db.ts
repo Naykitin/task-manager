@@ -47,3 +47,16 @@ export async function assertTaskOwner(
     .first();
   if (!row) throw new HttpError(404, "Task not found");
 }
+
+export async function assertTimeEntryOwner(
+  env: Env,
+  userId: string,
+  entryId: string,
+): Promise<void> {
+  const row = await env.DB.prepare(
+    "SELECT 1 FROM time_entries WHERE id = ? AND user_id = ?",
+  )
+    .bind(entryId, userId)
+    .first();
+  if (!row) throw new HttpError(404, "Time entry not found");
+}

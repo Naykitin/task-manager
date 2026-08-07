@@ -40,6 +40,18 @@ export function formatDate(iso: string): string {
   });
 }
 
+/** ISO timestamp -> value for an <input type="datetime-local">, in local time. */
+export function toDatetimeLocal(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** <input type="datetime-local"> value (local time) -> ISO UTC timestamp. */
+export function fromDatetimeLocal(value: string): string {
+  return new Date(value).toISOString();
+}
+
 /** Elapsed seconds since an ISO timestamp (never negative). */
 export function elapsedSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));

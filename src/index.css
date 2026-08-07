@@ -206,7 +206,8 @@ textarea {
 .field input,
 .field textarea,
 select,
-input[type="date"] {
+input[type="date"],
+input[type="datetime-local"] {
   width: 100%;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -215,11 +216,13 @@ input[type="date"] {
   color: var(--text);
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
+  color-scheme: dark;
 }
 .field input:focus,
 .field textarea:focus,
 select:focus,
-input[type="date"]:focus {
+input[type="date"]:focus,
+input[type="datetime-local"]:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(109, 139, 255, 0.18);
 }
@@ -594,6 +597,35 @@ input[type="date"]:focus {
 .running-tag {
   color: var(--emerald);
   font-weight: 600;
+}
+.log-row-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+.log-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+.log-edit-row input[type="datetime-local"] {
+  width: auto;
+}
+.log-add-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.log-add-row .field {
+  margin-bottom: 0;
+}
+.log-add-row input[type="datetime-local"] {
+  width: auto;
 }
 
 /* ---------- Timesheet ---------- */

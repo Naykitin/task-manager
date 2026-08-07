@@ -112,6 +112,21 @@ export const api = {
     }),
   timeEntries: (taskId: string) =>
     request<{ entries: TimeEntry[] }>(`/api/tasks/${taskId}/time-entries`),
+  addTimeEntry: (taskId: string, started_at: string, ended_at: string) =>
+    request<{ entry: TimeEntry }>(`/api/tasks/${taskId}/time-entries`, {
+      method: "POST",
+      body: JSON.stringify({ started_at, ended_at }),
+    }),
+  updateTimeEntry: (
+    id: string,
+    patch: { started_at?: string; ended_at?: string },
+  ) =>
+    request<{ entry: TimeEntry }>(`/api/time-entries/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteTimeEntry: (id: string) =>
+    request<{ ok: true }>(`/api/time-entries/${id}`, { method: "DELETE" }),
 
   // ---- Timesheet ----
   timesheet: (start: string, end: string) => {
