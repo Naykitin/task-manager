@@ -11,6 +11,11 @@ import { HttpError, json, newId, readJson, requireString } from "../util.ts";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Fixed dummy hash used to run a real PBKDF2 derivation for unknown emails
+// too, so login response time doesn't leak whether an account exists.
+const DUMMY_PASSWORD_HASH =
+  "pbkdf2$100000$AQIDBAUGBwgJCgsMDQ4PEA==$AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
+
 /** Seed a fresh account with one default board + To Do / In Progress / Done. */
 async function createDefaultBoard(env: Env, userId: string): Promise<void> {
   const boardId = newId();
@@ -92,9 +97,12 @@ export async function login(req: Request, env: Env): Promise<Response> {
     .bind(email)
     .first<User & { password_hash: string }>();
 
-  // Always run a verify to reduce timing side-channels on unknown emails.
-  const ok =
-    row != null && (await verifyPassword(password, row.password_hash));
+  // Always run a verify — including for unknown emails, against a dummy
+  // hash — so response time doesn't reveal whether the account exists.
+  const ok = await verifyPassword(
+    password,
+    row ? row.password_hash : DUMMY_PASSWORD_HASH,
+  );
   if (!row || !ok) {
     throw new HttpError(401, "Invalid email or password");
   }
