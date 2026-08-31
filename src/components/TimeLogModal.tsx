@@ -8,6 +8,7 @@ import {
   toDatetimeLocal,
   fromDatetimeLocal,
 } from "../format.ts";
+import { ConfirmModal } from "./ConfirmModal.tsx";
 import { Modal } from "./Modal.tsx";
 
 function defaultAddRange(): { start: string; end: string } {
@@ -40,6 +41,7 @@ export function TimeLogModal({
   const [editError, setEditError] = useState<string | null>(null);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmEntry, setConfirmEntry] = useState<TimeEntry | null>(null);
 
   const load = () =>
     api
@@ -109,12 +111,7 @@ export function TimeLogModal({
   }
 
   async function onDelete(entry: TimeEntry) {
-    if (
-      !confirm(
-        `Delete this time entry (${formatDateTime(entry.started_at)})? This cannot be undone.`,
-      )
-    )
-      return;
+    setConfirmEntry(null);
     setDeletingId(entry.id);
     setError(null);
     try {
@@ -214,7 +211,7 @@ export function TimeLogModal({
                           className="icon-btn"
                           title="Delete"
                           disabled={deletingId === entry.id}
-                          onClick={() => onDelete(entry)}
+                          onClick={() => setConfirmEntry(entry)}
                         >
                           🗑
                         </button>
@@ -275,6 +272,14 @@ export function TimeLogModal({
             Close
           </button>
         </div>
+      )}
+      {confirmEntry && (
+        <ConfirmModal
+          title="Delete time entry"
+          message={`Delete this time entry (${formatDateTime(confirmEntry.started_at)})? This cannot be undone.`}
+          onCancel={() => setConfirmEntry(null)}
+          onConfirm={() => onDelete(confirmEntry)}
+        />
       )}
     </Modal>
   );

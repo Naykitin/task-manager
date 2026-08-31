@@ -582,6 +582,10 @@ input[type="datetime-local"]:focus {
   gap: 10px;
   margin-top: 8px;
 }
+.confirm-message {
+  margin: 0 0 4px;
+  color: var(--text);
+}
 
 /* ---------- Misc ---------- */
 .empty-block {
