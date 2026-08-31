@@ -18,6 +18,7 @@ import { formatDuration } from "../format.ts";
 import { ColumnView } from "./ColumnView.tsx";
 import { TaskModal } from "./TaskModal.tsx";
 import { TimeLogModal } from "./TimeLogModal.tsx";
+import { VoiceInbox } from "./VoiceInbox.tsx";
 
 const LAST_BOARD_KEY = "tm_last_board_id";
 
@@ -45,6 +46,7 @@ export function BoardView() {
     | null
   >(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   const setColumns = useCallback((next: ColumnWithTasks[]) => {
     columnsRef.current = next;
@@ -361,6 +363,21 @@ export function BoardView() {
       </div>
 
       {error && <div className="banner-error">{error}</div>}
+
+      {currentBoard && (
+        <div className="voice-toggle-wrap">
+          <button className="btn ghost sm" onClick={() => setVoiceOpen((v) => !v)}>
+            {voiceOpen ? "▾" : "▸"} Add tasks via voice/text
+          </button>
+          {voiceOpen && (
+            <VoiceInbox
+              key={currentBoard.id}
+              boardId={currentBoard.id}
+              onApplied={reload}
+            />
+          )}
+        </div>
+      )}
 
       {!currentBoard ? (
         <div className="empty-block">

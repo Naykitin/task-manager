@@ -49,7 +49,8 @@ export function App() {
       </header>
 
       <main className="main">
-        {view === "board" ? <BoardView /> : <Timesheet />}
+        {view === "board" && <BoardView />}
+        {view === "timesheet" && <Timesheet />}
       </main>
     </div>
   );

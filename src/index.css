@@ -764,3 +764,86 @@ input[type="datetime-local"]:focus {
     display: none;
   }
 }
+
+.voice-toggle-wrap {
+  margin-bottom: 12px;
+}
+.voice-inbox {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+.voice-applied {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  background: rgba(47, 191, 143, 0.12);
+  border: 1px solid var(--emerald);
+  color: var(--text);
+}
+.voice-review {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.voice-task-row {
+  display: flex;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.voice-task-row > input[type="checkbox"] {
+  margin-top: 6px;
+  width: auto;
+}
+.voice-task-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.voice-links {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.voice-open-questions {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.voice-mic-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mic-lang-select {
+  width: auto;
+  padding: 6px 8px;
+}
+.mic-btn.listening {
+  animation: mic-pulse 1.2s ease-in-out infinite;
+}
+.voice-mic-error {
+  color: var(--rose);
+  font-size: 13px;
+}
+.voice-mic-warning {
+  color: var(--text-dim);
+  font-size: 13px;
+}
+@keyframes mic-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 95, 107, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(239, 95, 107, 0);
+  }
+}

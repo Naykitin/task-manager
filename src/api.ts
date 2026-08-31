@@ -1,11 +1,14 @@
 import type {
+  ApplyNewTaskInput,
   Board,
   BoardDetail,
   Column,
+  StructuringResult,
   Task,
   TimeEntry,
   TimesheetResponse,
   User,
+  VoiceNote,
 } from "../shared/types.ts";
 
 export class ApiError extends Error {
@@ -127,6 +130,23 @@ export const api = {
     }),
   deleteTimeEntry: (id: string) =>
     request<{ ok: true }>(`/api/time-entries/${id}`, { method: "DELETE" }),
+
+  // ---- Voice notes / AI structuring ----
+  createVoiceNote: (transcript: string) =>
+    request<{ note: VoiceNote }>("/api/voice-notes", {
+      method: "POST",
+      body: JSON.stringify({ transcript }),
+    }),
+  structureVoiceNote: (id: string, boardId: string) =>
+    request<StructuringResult>(`/api/voice-notes/${id}/structure`, {
+      method: "POST",
+      body: JSON.stringify({ board_id: boardId }),
+    }),
+  applyVoiceNote: (id: string, new_tasks: ApplyNewTaskInput[]) =>
+    request<{ tasks: Task[] }>(`/api/voice-notes/${id}/apply`, {
+      method: "POST",
+      body: JSON.stringify({ new_tasks }),
+    }),
 
   // ---- Timesheet ----
   timesheet: (start: string, end: string) => {
