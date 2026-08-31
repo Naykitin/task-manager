@@ -26,8 +26,10 @@ Cloudflare Workers + D1).
 Тип связи: "blocks", "related", "duplicate". Укажи направление явно.
 4. Если в заметке есть нерешённый вопрос — вынеси в open_questions, НЕ создавай как задачу.
 5. Если задача дублирует существующую по смыслу — не создавай новую, отметь как duplicate.
-6. Всегда пиши title и description на английском, независимо от языка транскрипта — для
-консистентности с существующими задачами в системе.
+6. Пиши title, description, question и context на том же языке, на котором сделана
+голосовая заметка (например, заметка на русском — title/description на русском;
+заметка на английском — на английском). Не переводи на английский специально ради
+консистентности с существующими задачами — язык транскрипта важнее.
 
 A single voice note may contain multiple distinct, unrelated requests. Evaluate and
 process each request independently — do not let one request (e.g. a status change)

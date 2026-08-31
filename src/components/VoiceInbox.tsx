@@ -89,6 +89,8 @@ function describeSpeechError(code: string): string {
   }
 }
 
+const SPEECH_LANG_KEY = "tm_speech_lang";
+
 function appendTranscript(prev: string, addition: string): string {
   const trimmed = addition.trim();
   if (!trimmed) return prev;
@@ -117,10 +119,19 @@ export function VoiceInbox({ boardId, onApplied }: Props) {
 
   const [applying, setApplying] = useState(false);
   const [appliedTasks, setAppliedTasks] = useState<Task[] | null>(null);
+  const [discarding, setDiscarding] = useState(false);
+  const [pendingCount, setPendingCount] = useState<number | null>(null);
+  // null = still checking; only gate the UI on an explicit `false` so a
+  // slow/failed check doesn't flash a "disabled" message for a working server.
+  const [available, setAvailable] = useState<boolean | null>(null);
 
   const [listening, setListening] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
-  const [speechLang, setSpeechLang] = useState(""); // "" = auto (navigator.language)
+  // "" = auto (navigator.language). Persisted across reloads so the user
+  // doesn't have to reselect their dictation language every time.
+  const [speechLang, setSpeechLang] = useState(
+    () => localStorage.getItem(SPEECH_LANG_KEY) ?? "",
+  );
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   // Text from the latest non-final result, in case stop() ends the session
   // before the engine ever marks that last utterance as isFinal — otherwise
@@ -133,10 +144,30 @@ export function VoiceInbox({ boardId, onApplied }: Props) {
     return () => recognitionRef.current?.stop();
   }, []);
 
+  function refreshPendingCount() {
+    api
+      .listVoiceNotes("pending")
+      .then(({ notes }) => setPendingCount(notes.length))
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    refreshPendingCount();
+    api
+      .getVoiceAvailability()
+      .then(({ available }) => setAvailable(available))
+      .catch(() => setAvailable(true));
+  }, []);
+
   function flushPendingInterim() {
     if (!pendingInterimRef.current.trim()) return;
     setTranscript((prev) => appendTranscript(prev, pendingInterimRef.current));
     pendingInterimRef.current = "";
+  }
+
+  function updateSpeechLang(lang: string) {
+    setSpeechLang(lang);
+    localStorage.setItem(SPEECH_LANG_KEY, lang);
   }
 
   function startListening() {
@@ -209,6 +240,7 @@ export function VoiceInbox({ boardId, onApplied }: Props) {
       setError(err instanceof Error ? err.message : "Failed to structure transcript");
     } finally {
       setStructuring(false);
+      refreshPendingCount();
     }
   }
 
@@ -248,11 +280,52 @@ export function VoiceInbox({ boardId, onApplied }: Props) {
       setError(err instanceof Error ? err.message : "Failed to apply");
     } finally {
       setApplying(false);
+      refreshPendingCount();
     }
+  }
+
+  async function handleDiscard() {
+    if (!noteId) return;
+    setDiscarding(true);
+    setError(null);
+    try {
+      await api.discardVoiceNote(noteId);
+      setNoteId(null);
+      setItems(null);
+      setOpenQuestions([]);
+      setBoard(null);
+      setTranscript("");
+      setAppliedTasks(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to discard");
+    } finally {
+      setDiscarding(false);
+      refreshPendingCount();
+    }
+  }
+
+  if (available === false) {
+    return (
+      <div className="voice-inbox voice-disabled">
+        <p>🔒 Voice/text task creation is disabled on this server.</p>
+        <p className="muted">
+          This feature needs an ANTHROPIC_API_KEY for the Claude API. If you're
+          self-hosting this project, set one via{" "}
+          <code>wrangler secret put ANTHROPIC_API_KEY</code> (or{" "}
+          <code>ANTHROPIC_API_KEY</code> in <code>.dev.vars</code> for local dev)
+          to enable it.
+        </p>
+      </div>
+    );
   }
 
   return (
     <div className="voice-inbox">
+      {pendingCount !== null && pendingCount > 0 && (
+        <div className="voice-pending-count">
+          {pendingCount} pending note{pendingCount === 1 ? "" : "s"} awaiting review
+        </div>
+      )}
       <label className="field">
         <span>Voice note transcript</span>
         <textarea
@@ -283,12 +356,16 @@ export function VoiceInbox({ boardId, onApplied }: Props) {
               className="mic-lang-select"
               value={speechLang}
               disabled={listening}
-              onChange={(e) => setSpeechLang(e.target.value)}
+              onChange={(e) => updateSpeechLang(e.target.value)}
               title="Speech recognition language"
             >
               <option value="">Auto ({navigator.language || "en-US"})</option>
               <option value="ru-RU">Russian (ru-RU)</option>
               <option value="en-US">English (en-US)</option>
+              <option value="de-DE">German (de-DE)</option>
+              <option value="es-ES">Spanish (es-ES)</option>
+              <option value="fr-FR">French (fr-FR)</option>
+              <option value="uk-UA">Ukrainian (uk-UA)</option>
             </select>
           </>
         )}
@@ -374,9 +451,19 @@ export function VoiceInbox({ boardId, onApplied }: Props) {
             </>
           )}
 
-          <button className="btn primary" onClick={handleApply} disabled={applying}>
-            {applying ? "Applying…" : "Apply selected"}
-          </button>
+          <div className="voice-review-actions">
+            <button className="btn primary" onClick={handleApply} disabled={applying || discarding}>
+              {applying ? "Applying…" : "Apply selected"}
+            </button>
+            <button
+              type="button"
+              className="btn ghost"
+              onClick={handleDiscard}
+              disabled={applying || discarding}
+            >
+              {discarding ? "Discarding…" : "Discard"}
+            </button>
+          </div>
         </div>
       )}
     </div>

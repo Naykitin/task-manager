@@ -1,12 +1,27 @@
 import type { Env } from "../env.ts";
 import type { ApplyLinkInput, ApplyNewTaskInput, VoiceNote } from "../../shared/types.ts";
-import { assertColumnOwner, assertTaskOwner } from "../db.ts";
 import { buildInsertTaskStmt, getProjectSnapshot, loadTask } from "./tasks.ts";
 import { structureTranscript } from "../lib/structuring.ts";
 import { HttpError, json, newId, nowIso, readJson, requireString } from "../util.ts";
 
 const RELATION_TYPES = ["blocks", "related", "duplicate"];
 const DIRECTIONS = ["this_blocks_that", "that_blocks_this"];
+
+/**
+ * Voice-note structuring calls the Claude API, which needs an API key that
+ * isn't part of this open-source repo. A self-hosted deployment without one
+ * configured should get a clear, actionable error instead of a cryptic 401
+ * from Anthropic — and the frontend should be able to check this up front
+ * instead of only finding out after the user has typed a transcript.
+ */
+function isVoiceStructuringAvailable(env: Env): boolean {
+  return Boolean(env.ANTHROPIC_API_KEY && env.ANTHROPIC_API_KEY.trim());
+}
+
+/** GET /api/voice-notes/availability — whether Claude structuring is configured. */
+export async function getVoiceAvailability(env: Env): Promise<Response> {
+  return json({ available: isVoiceStructuringAvailable(env) });
+}
 
 /** POST /api/voice-notes — store a raw transcript, status starts as 'pending'. */
 export async function createVoiceNote(
@@ -81,6 +96,68 @@ async function assertVoiceNoteOwner(
 }
 
 /**
+ * POST /api/voice-notes/:id/discard — marks a note 'discarded' without
+ * creating any tasks. Used when a note has no usable new_tasks (e.g. it
+ * only produced open_questions) or the user simply rejects the suggestions.
+ */
+export async function discardVoiceNote(
+  noteId: string,
+  userId: string,
+  env: Env,
+): Promise<Response> {
+  await assertVoiceNoteOwner(env, userId, noteId);
+  await env.DB.prepare(
+    "UPDATE voice_notes SET status = 'discarded', reviewed_at = ? WHERE id = ?",
+  )
+    .bind(nowIso(), noteId)
+    .run();
+  return json({ ok: true });
+}
+
+/**
+ * Resolves the board_id that owns a column, scoped to userId (404 if the
+ * column doesn't exist or isn't owned by this user).
+ */
+async function getColumnBoardId(
+  env: Env,
+  userId: string,
+  columnId: string,
+): Promise<string> {
+  const row = await env.DB.prepare(
+    `SELECT b.id AS board_id
+       FROM columns c
+       JOIN boards b ON b.id = c.board_id
+      WHERE c.id = ? AND b.user_id = ?`,
+  )
+    .bind(columnId, userId)
+    .first<{ board_id: string }>();
+  if (!row) throw new HttpError(404, "Column not found");
+  return row.board_id;
+}
+
+/**
+ * Resolves the board_id that owns a task, scoped to userId (404 if the task
+ * doesn't exist or isn't owned by this user).
+ */
+async function getTaskBoardId(
+  env: Env,
+  userId: string,
+  taskId: string,
+): Promise<string> {
+  const row = await env.DB.prepare(
+    `SELECT b.id AS board_id
+       FROM tasks t
+       JOIN columns c ON c.id = t.column_id
+       JOIN boards b ON b.id = c.board_id
+      WHERE t.id = ? AND b.user_id = ?`,
+  )
+    .bind(taskId, userId)
+    .first<{ board_id: string }>();
+  if (!row) throw new HttpError(404, "Task not found");
+  return row.board_id;
+}
+
+/**
  * POST /api/voice-notes/:id/structure — preview only. Sends the transcript
  * plus the snapshot of ONE board to Claude and returns its suggestions
  * as-is; nothing is written to tasks/task_links here.
@@ -96,6 +173,14 @@ export async function structureVoiceNote(
   userId: string,
   env: Env,
 ): Promise<Response> {
+  if (!isVoiceStructuringAvailable(env)) {
+    throw new HttpError(
+      503,
+      "Voice/text task creation is disabled on this server: no ANTHROPIC_API_KEY is configured. " +
+        "Set one via `wrangler secret put ANTHROPIC_API_KEY` (or ANTHROPIC_API_KEY in .dev.vars for local dev) to enable it.",
+    );
+  }
+
   const note = await assertVoiceNoteOwner(env, userId, noteId);
   const body = await readJson<{ board_id?: string }>(req);
   const boardId = requireString(body.board_id, "board_id");
@@ -170,15 +255,26 @@ export async function applyVoiceNote(
   }
   const newTasks = body.new_tasks.map(validateApplyNewTask);
 
-  // Verify ownership of every target column and every linked existing task
-  // up front — these are read-only checks, not part of the write batch.
+  // Verify ownership of every target column, resolve which board each one
+  // belongs to, and — critically — verify every linked existing task
+  // belongs to that SAME board. Boards are separate, unrelated client
+  // projects; a link must never straddle two boards, even when both belong
+  // to the same user. These are read-only checks, not part of the write batch.
   const columnIds = [...new Set(newTasks.map((t) => t.column_id))];
+  const boardIdByColumn = new Map<string, string>();
   for (const columnId of columnIds) {
-    await assertColumnOwner(env, userId, columnId);
+    boardIdByColumn.set(columnId, await getColumnBoardId(env, userId, columnId));
   }
   for (const t of newTasks) {
+    const targetBoardId = boardIdByColumn.get(t.column_id)!;
     for (const link of t.links ?? []) {
-      await assertTaskOwner(env, userId, link.task_id);
+      const linkedTaskBoardId = await getTaskBoardId(env, userId, link.task_id);
+      if (linkedTaskBoardId !== targetBoardId) {
+        throw new HttpError(
+          400,
+          `links[].task_id ${link.task_id} belongs to a different board than the target column — cross-board links are not allowed`,
+        );
+      }
     }
   }
 

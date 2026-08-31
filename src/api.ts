@@ -137,6 +137,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ transcript }),
     }),
+  getVoiceAvailability: () =>
+    request<{ available: boolean }>("/api/voice-notes/availability"),
+  listVoiceNotes: (status?: VoiceNote["status"]) =>
+    request<{ notes: VoiceNote[] }>(
+      status ? `/api/voice-notes?status=${status}` : "/api/voice-notes",
+    ),
   structureVoiceNote: (id: string, boardId: string) =>
     request<StructuringResult>(`/api/voice-notes/${id}/structure`, {
       method: "POST",
@@ -147,6 +153,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ new_tasks }),
     }),
+  discardVoiceNote: (id: string) =>
+    request<{ ok: true }>(`/api/voice-notes/${id}/discard`, { method: "POST" }),
 
   // ---- Timesheet ----
   timesheet: (start: string, end: string) => {

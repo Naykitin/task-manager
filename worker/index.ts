@@ -92,6 +92,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
 
   // ---- Voice notes ----
+  if (a === "voice-notes" && b === "availability" && !c && method === "GET") {
+    return voice.getVoiceAvailability(env);
+  }
   if (a === "voice-notes" && !b) {
     if (method === "GET") return voice.listVoiceNotes(url, userId, env);
     if (method === "POST") return voice.createVoiceNote(req, userId, env);
@@ -101,6 +104,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (a === "voice-notes" && b && c === "apply" && method === "POST") {
     return voice.applyVoiceNote(req, b, userId, env);
+  }
+  if (a === "voice-notes" && b && c === "discard" && method === "POST") {
+    return voice.discardVoiceNote(b, userId, env);
   }
 
   // ---- Time entries (direct edit/delete by id) ----

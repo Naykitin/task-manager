@@ -768,6 +768,14 @@ input[type="datetime-local"]:focus {
 .voice-toggle-wrap {
   margin-bottom: 12px;
 }
+.voice-disabled code {
+  font-family: var(--mono);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 12px;
+}
 .voice-inbox {
   max-width: 720px;
   display: flex;
@@ -786,6 +794,14 @@ input[type="datetime-local"]:focus {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+.voice-review-actions {
+  display: flex;
+  gap: 10px;
+}
+.voice-pending-count {
+  font-size: 13px;
+  color: var(--text-dim);
 }
 .voice-task-row {
   display: flex;
