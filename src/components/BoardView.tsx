@@ -16,6 +16,7 @@ import type { Board, ColumnWithTasks, Task } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { formatDuration } from "../format.ts";
 import { ColumnView } from "./ColumnView.tsx";
+import { ConfirmModal } from "./ConfirmModal.tsx";
 import { TaskModal } from "./TaskModal.tsx";
 import { TimeLogModal } from "./TimeLogModal.tsx";
 import { VoiceInbox } from "./VoiceInbox.tsx";
@@ -47,6 +48,10 @@ export function BoardView() {
   >(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<
+    { title: string; message: string; onConfirm: () => void } | null
+  >(null);
+  const closeConfirm = () => setConfirmModal(null);
 
   const setColumns = useCallback((next: ColumnWithTasks[]) => {
     columnsRef.current = next;
@@ -155,12 +160,32 @@ export function BoardView() {
     await reload();
   }
 
-  const onDeleteTask = (task: Task) =>
-    withBusy(async () => {
-      if (!confirm(`Delete task "${task.title}"?`)) return;
-      await api.deleteTask(task.id);
-      await reload();
+  const onDeleteTask = (task: Task) => {
+    setConfirmModal({
+      title: "Delete task",
+      message: `Delete task "${task.title}"?`,
+      onConfirm: () => {
+        closeConfirm();
+        withBusy(async () => {
+          await api.deleteTask(task.id);
+          await reload();
+        });
+      },
     });
+  };
+
+  // Clicking a linked task's title "navigates" to it the same way the
+  // existing card-title click does: open its edit modal. No separate
+  // route/highlight mechanism exists in this app to reuse instead.
+  const onNavigateToTask = (taskId: string) => {
+    for (const c of columns) {
+      const task = c.tasks.find((t) => t.id === taskId);
+      if (task) {
+        setModal({ mode: "edit", task });
+        return;
+      }
+    }
+  };
 
   // ---- Columns ----
   const onAddColumn = () =>
@@ -180,17 +205,19 @@ export function BoardView() {
       await reload();
     });
 
-  const onDeleteColumn = (column: ColumnWithTasks) =>
-    withBusy(async () => {
-      if (
-        !confirm(
-          `Delete column "${column.name}" and its ${column.tasks.length} task(s)?`,
-        )
-      )
-        return;
-      await api.deleteColumn(column.id);
-      await reload();
+  const onDeleteColumn = (column: ColumnWithTasks) => {
+    setConfirmModal({
+      title: "Delete column",
+      message: `Delete column "${column.name}" and its ${column.tasks.length} task(s)?`,
+      onConfirm: () => {
+        closeConfirm();
+        withBusy(async () => {
+          await api.deleteColumn(column.id);
+          await reload();
+        });
+      },
     });
+  };
 
   const onAddBoard = () =>
     withBusy(async () => {
@@ -201,27 +228,29 @@ export function BoardView() {
       await switchBoard(board.id);
     });
 
-  const onDeleteBoard = () =>
-    withBusy(async () => {
-      const board = boards.find((b) => b.id === currentBoardId);
-      if (!board) return;
-      if (
-        !confirm(
-          `Delete board "${board.name}" and all of its columns, tasks, and time entries? This cannot be undone.`,
-        )
-      )
-        return;
-      await api.deleteBoard(board.id);
-      const remaining = boards.filter((b) => b.id !== board.id);
-      setBoards(remaining);
-      if (remaining[0]) {
-        await switchBoard(remaining[0].id);
-      } else {
-        setCurrentBoardId(null);
-        localStorage.removeItem(LAST_BOARD_KEY);
-        setColumns([]);
-      }
+  const onDeleteBoard = () => {
+    const board = boards.find((b) => b.id === currentBoardId);
+    if (!board) return;
+    setConfirmModal({
+      title: "Delete board",
+      message: `Delete board "${board.name}" and all of its columns, tasks, and time entries? This cannot be undone.`,
+      onConfirm: () => {
+        closeConfirm();
+        withBusy(async () => {
+          await api.deleteBoard(board.id);
+          const remaining = boards.filter((b) => b.id !== board.id);
+          setBoards(remaining);
+          if (remaining[0]) {
+            await switchBoard(remaining[0].id);
+          } else {
+            setCurrentBoardId(null);
+            localStorage.removeItem(LAST_BOARD_KEY);
+            setColumns([]);
+          }
+        });
+      },
     });
+  };
 
   // ---- Drag and drop ----
   function onDragStart(event: DragStartEvent) {
@@ -406,6 +435,7 @@ export function BoardView() {
                 onEdit={(task) => setModal({ mode: "edit", task })}
                 onDelete={onDeleteTask}
                 onHistory={(task) => setHistoryTask(task)}
+                onNavigateToTask={onNavigateToTask}
               />
             ))}
             <button className="add-column" onClick={onAddColumn}>
@@ -436,6 +466,14 @@ export function BoardView() {
           task={historyTask}
           onClose={() => setHistoryTask(null)}
           onChange={reload}
+        />
+      )}
+      {confirmModal && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          onCancel={closeConfirm}
+          onConfirm={confirmModal.onConfirm}
         />
       )}
     </div>

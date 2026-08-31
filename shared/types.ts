@@ -34,6 +34,7 @@ export interface Task {
   // Aggregates joined in by the board/task endpoints:
   total_seconds: number; // sum of completed time entries
   running_entry: TimeEntry | null; // the active (unstopped) entry, if any
+  links: TaskLinkView[]; // this task's relations to other tasks
 }
 
 export interface TimeEntry {
@@ -113,6 +114,16 @@ export interface TaskLink {
   to_task_id: string;
   relation_type: RelationType;
   created_at: string;
+}
+
+/** A task's relation to one other task, from that task's own point of view. */
+export interface TaskLinkView {
+  task_id: string; // the OTHER task's id
+  title: string; // the OTHER task's title
+  relation_type: RelationType;
+  // outgoing: this task is from_task_id (e.g. "this blocks that").
+  // incoming: this task is to_task_id (e.g. "this is blocked by that").
+  direction: "outgoing" | "incoming";
 }
 
 // ---- Project snapshot (context fed to the AI structuring prompt) ----

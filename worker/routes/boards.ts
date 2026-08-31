@@ -4,7 +4,9 @@ import type {
   BoardDetail,
   Column,
   ColumnWithTasks,
+  RelationType,
   Task,
+  TaskLinkView,
   TimeEntry,
 } from "../../shared/types.ts";
 import { assertBoardOwner, assertColumnOwner } from "../db.ts";
@@ -119,11 +121,54 @@ export async function getBoard(
     .bind(userId)
     .first<TimeEntry>();
 
+  // Every link between two tasks on this board, one row per link — expanded
+  // into two per-task view entries (one for each side) below.
+  const linkRows = await env.DB.prepare(
+    `SELECT tl.from_task_id, tl.to_task_id, tl.relation_type,
+            tf.title AS from_title, tt.title AS to_title
+       FROM task_links tl
+       JOIN tasks tf ON tf.id = tl.from_task_id
+       JOIN columns cf ON cf.id = tf.column_id
+       JOIN tasks tt ON tt.id = tl.to_task_id
+       JOIN columns ct ON ct.id = tt.column_id
+      WHERE cf.board_id = ? AND ct.board_id = ?`,
+  )
+    .bind(boardId, boardId)
+    .all<{
+      from_task_id: string;
+      to_task_id: string;
+      relation_type: RelationType;
+      from_title: string;
+      to_title: string;
+    }>();
+
+  const linksByTask = new Map<string, TaskLinkView[]>();
+  for (const l of linkRows.results) {
+    const outgoing = linksByTask.get(l.from_task_id) ?? [];
+    outgoing.push({
+      task_id: l.to_task_id,
+      title: l.to_title,
+      relation_type: l.relation_type,
+      direction: "outgoing",
+    });
+    linksByTask.set(l.from_task_id, outgoing);
+
+    const incoming = linksByTask.get(l.to_task_id) ?? [];
+    incoming.push({
+      task_id: l.from_task_id,
+      title: l.from_title,
+      relation_type: l.relation_type,
+      direction: "incoming",
+    });
+    linksByTask.set(l.to_task_id, incoming);
+  }
+
   const byColumn = new Map<string, Task[]>();
   for (const t of tasks.results) {
     const task: Task = {
       ...t,
       running_entry: running && running.task_id === t.id ? running : null,
+      links: linksByTask.get(t.id) ?? [],
     };
     const arr = byColumn.get(t.column_id) ?? [];
     arr.push(task);

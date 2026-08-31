@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Task } from "../../shared/types.ts";
+import type { Task, TaskLinkView } from "../../shared/types.ts";
 import { formatClock, formatDuration } from "../format.ts";
 
 interface Props {
@@ -12,6 +12,16 @@ interface Props {
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
   onHistory: (task: Task) => void;
+  onNavigateToTask: (taskId: string) => void;
+}
+
+/** Prefix text for one link row, per relation_type + direction. */
+function linkPrefix(link: TaskLinkView): string {
+  if (link.relation_type === "blocks") {
+    return link.direction === "outgoing" ? "🔗 blocks:" : "⚠ blocked by:";
+  }
+  if (link.relation_type === "related") return "🔁 related:";
+  return "duplicate of:";
 }
 
 export function TaskCard({
@@ -23,6 +33,7 @@ export function TaskCard({
   onEdit,
   onDelete,
   onHistory,
+  onNavigateToTask,
 }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id });
@@ -61,6 +72,23 @@ export function TaskCard({
 
       {task.description && (
         <div className="card-desc">{task.description}</div>
+      )}
+
+      {task.links.length > 0 && (
+        <ul className="card-links">
+          {task.links.map((link, i) => (
+            <li key={i} className="card-link-row">
+              <span className="card-link-prefix">{linkPrefix(link)}</span>{" "}
+              <button
+                type="button"
+                className="card-link-title"
+                onClick={() => onNavigateToTask(link.task_id)}
+              >
+                {link.title}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
 
       <div className="card-time">

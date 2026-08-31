@@ -4,6 +4,7 @@ import type {
   ProjectSnapshotBoard,
   Task,
   TaskLink,
+  TaskLinkView,
 } from "../../shared/types.ts";
 import { assertColumnOwner, assertTaskOwner } from "../db.ts";
 import {
@@ -286,7 +287,24 @@ export async function getProjectSnapshot(
   return { boards, links: linkRows.results };
 }
 
-/** Load a single task with its completed-time total and running entry. */
+/** This task's relations to other tasks, from its own point of view. */
+async function loadTaskLinks(env: Env, taskId: string): Promise<TaskLinkView[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT tl.relation_type,
+            CASE WHEN tl.from_task_id = ? THEN 'outgoing' ELSE 'incoming' END AS direction,
+            CASE WHEN tl.from_task_id = ? THEN tl.to_task_id ELSE tl.from_task_id END AS task_id,
+            CASE WHEN tl.from_task_id = ? THEN tt.title ELSE tf.title END AS title
+       FROM task_links tl
+       JOIN tasks tf ON tf.id = tl.from_task_id
+       JOIN tasks tt ON tt.id = tl.to_task_id
+      WHERE tl.from_task_id = ? OR tl.to_task_id = ?`,
+  )
+    .bind(taskId, taskId, taskId, taskId, taskId)
+    .all<TaskLinkView>();
+  return results;
+}
+
+/** Load a single task with its completed-time total, running entry, and links. */
 export async function loadTask(env: Env, taskId: string): Promise<Task> {
   const row = await env.DB.prepare(
     `SELECT t.id, t.column_id, t.title, t.description, t.position,
@@ -299,7 +317,7 @@ export async function loadTask(env: Env, taskId: string): Promise<Task> {
       GROUP BY t.id`,
   )
     .bind(taskId)
-    .first<Omit<Task, "running_entry">>();
+    .first<Omit<Task, "running_entry" | "links">>();
   if (!row) throw new HttpError(404, "Task not found");
 
   const running = await env.DB.prepare(
@@ -309,5 +327,7 @@ export async function loadTask(env: Env, taskId: string): Promise<Task> {
     .bind(taskId)
     .first<Task["running_entry"]>();
 
-  return { ...row, running_entry: running ?? null };
+  const links = await loadTaskLinks(env, taskId);
+
+  return { ...row, running_entry: running ?? null, links };
 }
