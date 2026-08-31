@@ -2,6 +2,8 @@
 
 A private, single-user **Kanban board with a built-in time tracker and
 timesheet/reporting**, built to run entirely on **Cloudflare's free tier**.
+Optionally, tasks can also be created by dictating or typing a free-form note
+that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 
 - **Frontend:** React 18 + Vite + TypeScript, drag & drop via `@dnd-kit`.
 - **Backend:** a single **Cloudflare Worker** (TypeScript) that serves the built
@@ -10,6 +12,10 @@ timesheet/reporting**, built to run entirely on **Cloudflare's free tier**.
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
+- **Voice Inbox (optional):** dictate (Web Speech API) or type a note →
+  Claude API extracts concrete tasks + relations to existing tasks → you
+  review/edit every suggestion → apply writes tasks + links atomically.
+  Entirely optional — the rest of the app works without it, see below.
 
 Everything is persisted in D1 — nothing is stored only in the browser.
 
@@ -25,15 +31,17 @@ task-manager/
 │   ├── db.ts             # Ownership guards (every query scoped to the user)
 │   ├── env.ts            # Env/bindings type
 │   ├── util.ts           # HTTP helpers
-│   └── routes/           # auth, boards, tasks, timer, timesheet
+│   ├── lib/structuring.ts # Claude API call + prompt for Voice Inbox
+│   └── routes/           # auth, boards, tasks, timer, timesheet, voice
 ├── src/                  # React app
-│   ├── components/        # BoardView, ColumnView, TaskCard, Timesheet, modals…
+│   ├── components/        # BoardView, ColumnView, TaskCard, Timesheet,
+│   │                       # VoiceInbox, Modal/ConfirmModal/TaskModal…
 │   ├── api.ts             # Typed fetch client
 │   ├── auth.tsx           # Auth context
 │   └── format.ts          # Duration / date helpers
 ├── shared/types.ts       # Types shared by Worker + client
-├── schema.sql            # D1 schema (also copied to migrations/0001_init.sql)
-├── migrations/           # D1 migrations
+├── schema.sql            # Full D1 schema for a fresh database (see below)
+├── migrations/           # D1 migrations (0001_init, 0002_voice_and_links)
 ├── wrangler.jsonc        # Worker + D1 + static-assets config
 └── vite.config.ts        # Vite + @cloudflare/vite-plugin
 ```
@@ -51,7 +59,8 @@ the session cookie and is scoped to the logged-in user.
 | GET  | `/api/auth/me` | current user |
 | GET  | `/api/boards` | list boards |
 | POST | `/api/boards` | `{ name }` (seeds To Do / In Progress / Done) |
-| GET  | `/api/boards/:id` | board with columns + tasks + time totals |
+| GET  | `/api/boards/:id` | board with columns + tasks (incl. `links`) + time totals |
+| DELETE | `/api/boards/:id` | delete board + everything under it |
 | POST | `/api/columns` | `{ board_id, name }` |
 | PATCH / DELETE | `/api/columns/:id` | rename / delete |
 | POST | `/api/tasks` | `{ column_id, title, description? }` |
@@ -60,8 +69,16 @@ the session cookie and is scoped to the logged-in user.
 | POST | `/api/tasks/:id/timer/start` | stops any running timer first |
 | POST | `/api/tasks/:id/timer/stop` | computes `duration_seconds` |
 | GET  | `/api/tasks/:id/time-entries` | history for a task |
+| POST | `/api/tasks/:id/time-entries` | `{ started_at, ended_at }` — add a manual entry |
+| PATCH / DELETE | `/api/time-entries/:id` | edit / delete a time entry directly |
 | GET  | `/api/timesheet?start=&end=&tzOffset=` | grouped by day/task/board + total |
 | GET  | `/api/timesheet/export?start=&end=&tzOffset=` | CSV download |
+| GET  | `/api/voice-notes/availability` | `{ available }` — is `ANTHROPIC_API_KEY` configured |
+| GET  | `/api/voice-notes` | list your voice notes, `?status=pending\|reviewed\|discarded` |
+| POST | `/api/voice-notes` | `{ transcript }` — store a raw note, status `pending` |
+| POST | `/api/voice-notes/:id/structure` | `{ board_id }` — Claude proposes tasks/links for that one board |
+| POST | `/api/voice-notes/:id/apply` | `{ new_tasks }` — writes the (edited) suggestions atomically |
+| POST | `/api/voice-notes/:id/discard` | mark a note `discarded` without creating tasks |
 
 `tzOffset` is minutes east of UTC (`-new Date().getTimezoneOffset()`); the client
 sends it automatically so day boundaries match your local day.
@@ -84,6 +101,8 @@ cp .dev.vars.example .dev.vars
 ```
 
 The example ships with `INVITE_CODE=letmein`; change it to whatever you like.
+`ANTHROPIC_API_KEY` is optional — see [Voice Inbox](#voice-inbox-optional) below.
+
 Create the local D1 database and apply the schema:
 
 ```bash
@@ -117,6 +136,7 @@ npm run db:remote         # wrangler d1 execute task-manager-db --remote --file=
 # d) Set production secrets (do NOT commit these)
 npx wrangler secret put JWT_SECRET      # paste a long random string
 npx wrangler secret put INVITE_CODE     # the code you'll use to register
+npx wrangler secret put ANTHROPIC_API_KEY  # optional, enables Voice Inbox — skip to leave it disabled
 
 # e) Build + deploy
 npm run deploy            # vite build && wrangler deploy
@@ -133,6 +153,32 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 
 ---
 
+## Voice Inbox (optional)
+
+Dictate (or type/paste) a free-form note under a board — e.g. "add a task to
+redesign the checkout page, it's blocked by the payment integration task" —
+and Claude extracts concrete tasks, suggests which existing tasks they relate
+to (`blocks` / `related` / `duplicate`), and flags anything ambiguous as an
+open question instead of guessing. Nothing is written until you review and
+apply.
+
+- **Requires `ANTHROPIC_API_KEY`.** Without it, `GET /api/voice-notes/availability`
+  reports `available: false` and the UI shows a plain "this feature is
+  disabled" message instead of the dictation form — the rest of the app is
+  completely unaffected. This is the intended state for anyone who forks the
+  repo but doesn't want to pay for Claude API usage.
+- **One board = one isolated context.** Every note is structured against the
+  snapshot of a single board only, and the backend rejects (400) any
+  suggested link between tasks on two different boards — a note dictated
+  under one board/client can never create tasks or links on another.
+- **Language:** tasks are written in whatever language the note itself is
+  in — no hardcoded list, Claude matches it automatically. The dictation
+  language selector (for the browser's speech-to-text, a separate concern
+  from the above) currently offers English, Russian, German, Spanish,
+  French, and Ukrainian, remembered across sessions.
+
+---
+
 ## Notes
 
 - **Single active timer:** starting a timer automatically stops any other
@@ -140,7 +186,8 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 - **Timesheet totals** only count completed entries (`ended_at` set). A running
   timer is reported separately as "in progress" and never inflates the total.
 - **Free tier:** Workers Free + D1 Free only. No Durable Objects, R2, KV, or
-  other paid add-ons.
+  other paid add-ons. (Voice Inbox calls the Claude API directly over `fetch`,
+  which is a paid, external API — everything else stays on the free tier.)
 - **Registration** is gated by `INVITE_CODE`, so even though the Worker URL is
   public, nobody can create an account without the code.
 
