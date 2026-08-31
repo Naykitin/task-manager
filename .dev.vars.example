@@ -7,3 +7,4 @@
 
 JWT_SECRET=replace-with-a-long-random-string
 INVITE_CODE=letmein
+ANTHROPIC_API_KEY=sk-ant-replace-with-your-key

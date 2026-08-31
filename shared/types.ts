@@ -29,6 +29,8 @@ export interface Task {
   position: number;
   created_at: string;
   updated_at: string;
+  source: "manual" | "ai_voice";
+  origin_voice_note_id: string | null;
   // Aggregates joined in by the board/task endpoints:
   total_seconds: number; // sum of completed time entries
   running_entry: TimeEntry | null; // the active (unstopped) entry, if any
@@ -89,6 +91,94 @@ export interface TimesheetResponse {
   days: TimesheetDay[];
   by_board: TimesheetBoardTotal[];
   by_task: TimesheetTaskTotal[];
+}
+
+// ---- Voice-note structuring ----
+
+export type RelationType = "blocks" | "related" | "duplicate";
+
+export interface VoiceNote {
+  id: string;
+  user_id: string;
+  audio_url: string | null;
+  transcript: string;
+  status: "pending" | "reviewed" | "discarded";
+  created_at: string;
+  reviewed_at: string | null;
+}
+
+export interface TaskLink {
+  id: string;
+  from_task_id: string;
+  to_task_id: string;
+  relation_type: RelationType;
+  created_at: string;
+}
+
+// ---- Project snapshot (context fed to the AI structuring prompt) ----
+
+export interface ProjectSnapshotTask {
+  id: string;
+  title: string;
+  description: string | null;
+  source: Task["source"];
+}
+
+export interface ProjectSnapshotColumn {
+  id: string;
+  name: string;
+  tasks: ProjectSnapshotTask[];
+}
+
+export interface ProjectSnapshotBoard {
+  id: string;
+  name: string;
+  columns: ProjectSnapshotColumn[];
+}
+
+export interface ProjectSnapshot {
+  boards: ProjectSnapshotBoard[];
+  links: TaskLink[];
+}
+
+// ---- AI structuring result (response of POST /api/voice-notes/:id/structure) ----
+
+export type VoiceLinkDirection = "this_blocks_that" | "that_blocks_this";
+
+export interface StructuredLink {
+  task_id: string;
+  relation_type: RelationType;
+  direction: VoiceLinkDirection;
+}
+
+export interface StructuredNewTask {
+  title: string;
+  description: string;
+  suggested_board: string;
+  suggested_column: string;
+  links: StructuredLink[];
+  confidence: "high" | "medium" | "low";
+}
+
+export interface StructuredOpenQuestion {
+  question: string;
+  context: string;
+}
+
+export interface StructuringResult {
+  new_tasks: StructuredNewTask[];
+  open_questions: StructuredOpenQuestion[];
+}
+
+// ---- Applying reviewed voice-note suggestions (request of POST /api/voice-notes/:id/apply) ----
+
+export type ApplyLinkInput = StructuredLink;
+
+export interface ApplyNewTaskInput {
+  title: string;
+  description?: string;
+  column_id: string;
+  links?: ApplyLinkInput[];
 }
 
 export interface ApiError {

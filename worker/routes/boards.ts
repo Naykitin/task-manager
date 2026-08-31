@@ -95,7 +95,7 @@ export async function getBoard(
   // Tasks for the whole board, each with summed completed time.
   const tasks = await env.DB.prepare(
     `SELECT t.id, t.column_id, t.title, t.description, t.position,
-            t.created_at, t.updated_at,
+            t.created_at, t.updated_at, t.source, t.origin_voice_note_id,
             COALESCE(SUM(te.duration_seconds), 0) AS total_seconds
        FROM tasks t
        JOIN columns c ON c.id = t.column_id

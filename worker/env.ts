@@ -5,4 +5,6 @@ export interface Env {
   JWT_SECRET: string;
   /** Required code to register a new account. Set via `wrangler secret put INVITE_CODE`. */
   INVITE_CODE: string;
+  /** Claude API key for voice-note structuring. Set via `wrangler secret put ANTHROPIC_API_KEY`. */
+  ANTHROPIC_API_KEY: string;
 }

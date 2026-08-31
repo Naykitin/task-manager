@@ -6,6 +6,7 @@ import * as boards from "./routes/boards.ts";
 import * as tasks from "./routes/tasks.ts";
 import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
+import * as voice from "./routes/voice.ts";
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
@@ -88,6 +89,18 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (a === "tasks" && b && c === "time-entries" && method === "POST") {
     return timer.createManualEntry(req, b, userId, env);
+  }
+
+  // ---- Voice notes ----
+  if (a === "voice-notes" && !b) {
+    if (method === "GET") return voice.listVoiceNotes(url, userId, env);
+    if (method === "POST") return voice.createVoiceNote(req, userId, env);
+  }
+  if (a === "voice-notes" && b && c === "structure" && method === "POST") {
+    return voice.structureVoiceNote(req, b, userId, env);
+  }
+  if (a === "voice-notes" && b && c === "apply" && method === "POST") {
+    return voice.applyVoiceNote(req, b, userId, env);
   }
 
   // ---- Time entries (direct edit/delete by id) ----
