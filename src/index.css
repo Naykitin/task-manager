@@ -30,8 +30,13 @@ body,
   height: 100%;
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
+  overflow-x: hidden;
   background: radial-gradient(
       1200px 600px at 80% -10%,
       rgba(109, 139, 255, 0.08),
@@ -133,6 +138,11 @@ textarea {
   padding: 4px 6px;
   border-radius: 6px;
   line-height: 1;
+  min-width: 30px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .icon-btn:hover {
   background: var(--bg-elev-2);
@@ -450,7 +460,8 @@ input[type="datetime-local"]:focus {
   border: none;
   color: var(--text-faint);
   cursor: grab;
-  padding: 0 2px;
+  padding: 6px 6px;
+  margin: -6px 0 -6px -6px;
   font-size: 15px;
   line-height: 1.2;
   touch-action: none;
@@ -541,7 +552,7 @@ input[type="datetime-local"]:focus {
 }
 .card-actions-right {
   display: flex;
-  gap: 2px;
+  gap: 4px;
 }
 
 /* ---------- Modal ---------- */
@@ -561,7 +572,11 @@ input[type="datetime-local"]:focus {
   border-radius: 14px;
   padding: 22px;
   width: 480px;
-  max-width: 100%;
+  /* A percentage max-width doesn't resolve here: the backdrop is a grid
+     with place-items:center, so its implicit track sizes to content
+     instead of the viewport, leaving the percentage with nothing to
+     resolve against. Size against the viewport directly instead. */
+  max-width: calc(100vw - 32px);
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: var(--shadow);
@@ -783,6 +798,11 @@ input[type="datetime-local"]:focus {
   text-align: right;
   font-family: var(--mono);
 }
+.ts-panel,
+.ts-day,
+.table-scroll {
+  overflow-x: auto;
+}
 
 @media (max-width: 760px) {
   .ts-grid {
@@ -790,9 +810,92 @@ input[type="datetime-local"]:focus {
   }
   .topbar {
     gap: 12px;
+    flex-wrap: wrap;
+    row-gap: 8px;
+    padding: 10px 14px;
+  }
+  .tabs {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
   }
   .user-email {
     display: none;
+  }
+
+  /* Prevents iOS Safari from auto-zooming the page when a field is
+     focused — any input/select/textarea under 16px triggers it. */
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  .main {
+    padding: 12px 12px 28px;
+  }
+
+  .board-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .board-select {
+    flex-wrap: wrap;
+  }
+  .board-select select {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .columns {
+    scroll-snap-type: x proximity;
+  }
+  .column {
+    width: min(86vw, 300px);
+    min-width: min(86vw, 300px);
+    max-height: calc(100vh - 260px);
+    max-height: calc(100dvh - 260px);
+    scroll-snap-align: start;
+  }
+
+  .modal {
+    padding: 16px;
+  }
+  .modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .modal-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .ts-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ts-range {
+    justify-content: space-between;
+  }
+  .ts-dates {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .ts-dates label {
+    width: 100%;
+  }
+  .ts-toolbar a.btn {
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .log-add-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .log-edit-row {
+    align-items: stretch;
   }
 }
 
@@ -869,6 +972,8 @@ input[type="datetime-local"]:focus {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+  row-gap: 8px;
 }
 .mic-lang-select {
   width: auto;

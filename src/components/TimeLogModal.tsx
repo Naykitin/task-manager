@@ -137,6 +137,7 @@ export function TimeLogModal({
           {entries.length === 0 ? (
             <div className="empty-block">No time tracked yet.</div>
           ) : (
+            <div className="table-scroll">
             <table className="log-table">
               <thead>
                 <tr>
@@ -221,6 +222,7 @@ export function TimeLogModal({
                 )}
               </tbody>
             </table>
+            </div>
           )}
         </>
       )}
