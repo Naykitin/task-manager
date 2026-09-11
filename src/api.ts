@@ -69,6 +69,11 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
   getBoard: (id: string) => request<{ board: BoardDetail }>(`/api/boards/${id}`),
+  updateBoard: (id: string, patch: { name?: string }) =>
+    request<{ board: Board }>(`/api/boards/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
   deleteBoard: (id: string) =>
     request<{ ok: true }>(`/api/boards/${id}`, { method: "DELETE" }),
   createColumn: (board_id: string, name: string) =>

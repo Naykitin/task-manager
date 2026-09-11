@@ -55,6 +55,7 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (a === "boards" && b && !c) {
     if (method === "GET") return boards.getBoard(b, userId, env);
+    if (method === "PATCH") return boards.updateBoard(req, b, userId, env);
     if (method === "DELETE") return boards.deleteBoard(b, userId, env);
   }
 

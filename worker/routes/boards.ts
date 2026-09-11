@@ -47,6 +47,27 @@ export async function createBoard(
   return json({ board }, { status: 201 });
 }
 
+/** PATCH /api/boards/:id — currently just renames the board. */
+export async function updateBoard(
+  req: Request,
+  boardId: string,
+  userId: string,
+  env: Env,
+): Promise<Response> {
+  await assertBoardOwner(env, userId, boardId);
+  const body = await readJson<{ name?: string }>(req);
+  const name = requireString(body.name, "name", { max: 100 });
+  await env.DB.prepare("UPDATE boards SET name = ? WHERE id = ?")
+    .bind(name, boardId)
+    .run();
+  const board = await env.DB.prepare(
+    "SELECT id, user_id, name, created_at FROM boards WHERE id = ?",
+  )
+    .bind(boardId)
+    .first<Board>();
+  return json({ board });
+}
+
 /** DELETE /api/boards/:id — removes the board and everything under it. */
 export async function deleteBoard(
   boardId: string,

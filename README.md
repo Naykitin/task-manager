@@ -60,6 +60,7 @@ the session cookie and is scoped to the logged-in user.
 | GET  | `/api/boards` | list boards |
 | POST | `/api/boards` | `{ name }` (seeds To Do / In Progress / Done) |
 | GET  | `/api/boards/:id` | board with columns + tasks (incl. `links`) + time totals |
+| PATCH | `/api/boards/:id` | `{ name }` — rename the board |
 | DELETE | `/api/boards/:id` | delete board + everything under it |
 | POST | `/api/columns` | `{ board_id, name }` |
 | PATCH / DELETE | `/api/columns/:id` | rename / delete |

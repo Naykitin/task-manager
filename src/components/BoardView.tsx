@@ -228,6 +228,18 @@ export function BoardView() {
       await switchBoard(board.id);
     });
 
+  const onRenameBoard = () =>
+    withBusy(async () => {
+      const board = boards.find((b) => b.id === currentBoardId);
+      if (!board) return;
+      const name = prompt("Rename board:", board.name);
+      if (!name?.trim() || name.trim() === board.name) return;
+      const { board: updated } = await api.updateBoard(board.id, {
+        name: name.trim(),
+      });
+      setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)));
+    });
+
   const onDeleteBoard = () => {
     const board = boards.find((b) => b.id === currentBoardId);
     if (!board) return;
@@ -375,6 +387,15 @@ export function BoardView() {
           <button className="btn ghost sm" onClick={onAddBoard}>
             + Board
           </button>
+          {currentBoard && (
+            <button
+              className="btn ghost sm"
+              onClick={onRenameBoard}
+              title="Rename this board"
+            >
+              ✎ Rename
+            </button>
+          )}
           {currentBoard && (
             <button
               className="btn danger sm"
