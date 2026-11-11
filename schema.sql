@@ -90,3 +90,107 @@ CREATE INDEX IF NOT EXISTS idx_time_entries_running
 -- Timesheet queries scan completed entries by user + start time.
 CREATE INDEX IF NOT EXISTS idx_time_entries_user_started
   ON time_entries(user_id, started_at) WHERE ended_at IS NOT NULL;
+
+
+-- API keys for the MCP endpoint (see migrations/0003_api_keys.sql).
+CREATE TABLE IF NOT EXISTS api_keys (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         TEXT NOT NULL,
+  key_hash     TEXT NOT NULL UNIQUE,
+  key_prefix   TEXT NOT NULL,
+  scopes       TEXT NOT NULL DEFAULT 'read,write',
+  created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  last_used_at TEXT,
+  revoked_at   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
+
+
+-- OAuth 2.1 for remote MCP connectors (see migrations/0004_oauth.sql).
+CREATE TABLE IF NOT EXISTS oauth_clients (
+  client_id     TEXT PRIMARY KEY,
+  client_name   TEXT NOT NULL,
+  redirect_uris TEXT NOT NULL, -- JSON array
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+CREATE TABLE IF NOT EXISTS oauth_codes (
+  code_hash      TEXT PRIMARY KEY,
+  client_id      TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+  user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  redirect_uri   TEXT NOT NULL,
+  code_challenge TEXT NOT NULL,
+  scopes         TEXT NOT NULL,
+  expires_at     TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS oauth_tokens (
+  id                 TEXT PRIMARY KEY,
+  access_hash        TEXT NOT NULL UNIQUE,
+  refresh_hash       TEXT NOT NULL UNIQUE,
+  client_id          TEXT NOT NULL REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+  user_id            TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  scopes             TEXT NOT NULL,
+  access_expires_at  TEXT NOT NULL,
+  refresh_expires_at TEXT NOT NULL,
+  created_at         TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  last_used_at       TEXT,
+  revoked_at         TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user ON oauth_tokens(user_id);
+
+
+
+-- Audit log of MCP tool calls (see migrations/0005_mcp_audit.sql).
+CREATE TABLE IF NOT EXISTS mcp_audit_log (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  source     TEXT NOT NULL CHECK (source IN ('api_key', 'oauth')),
+  credential TEXT NOT NULL, -- API key name or OAuth client name
+  tool       TEXT NOT NULL,
+  ok         INTEGER NOT NULL DEFAULT 1,
+  error      TEXT,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_user_time ON mcp_audit_log(user_id, created_at DESC);
+
+
+
+-- Performance & Security indexes (see migrations/0006_perf_and_security.sql).
+
+-- 1. Index for oauth_tokens cleanup and grant listing
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_cleanup
+  ON oauth_tokens(refresh_expires_at)
+  WHERE revoked_at IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_oauth_tokens_user_client
+  ON oauth_tokens(user_id, client_id, created_at DESC);
+
+-- 2. Index for oauth_codes cleanup and foreign keys
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_expires
+  ON oauth_codes(expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_client
+  ON oauth_codes(client_id);
+
+CREATE INDEX IF NOT EXISTS idx_oauth_codes_user
+  ON oauth_codes(user_id);
+
+-- 3. Index for global mcp_audit_log cleanup
+CREATE INDEX IF NOT EXISTS idx_mcp_audit_created
+  ON mcp_audit_log(created_at);
+
+-- 4. Composite index for api_keys list query (user_id + created_at)
+CREATE INDEX IF NOT EXISTS idx_api_keys_user_created
+  ON api_keys(user_id, created_at DESC);
+
+-- 5. Foreign key index on tasks.origin_voice_note_id
+CREATE INDEX IF NOT EXISTS idx_tasks_origin_voice_note
+  ON tasks(origin_voice_note_id)
+  WHERE origin_voice_note_id IS NOT NULL;
+
+-- 6. Index on tasks.updated_at for search ordering
+CREATE INDEX IF NOT EXISTS idx_tasks_updated_at
+  ON tasks(updated_at DESC);
+

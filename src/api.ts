@@ -172,4 +172,49 @@ export const api = {
     const tzOffset = -new Date().getTimezoneOffset();
     return `/api/timesheet/export?start=${start}&end=${end}&tzOffset=${tzOffset}`;
   },
+
+  // ---- Integrations (MCP) ----
+  listApiKeys: () => request<{ keys: ApiKeyInfo[] }>("/api/api-keys"),
+  createApiKey: (name: string, scopes: McpScope[]) =>
+    request<{ id: string; name: string; scopes: McpScope[]; key: string }>(
+      "/api/api-keys",
+      { method: "POST", body: JSON.stringify({ name, scopes }) },
+    ),
+  revokeApiKey: (id: string) =>
+    request<{ ok: true }>(`/api/api-keys/${id}`, { method: "DELETE" }),
+  listGrants: () => request<{ grants: OAuthGrant[] }>("/api/oauth/grants"),
+  revokeGrant: (clientId: string) =>
+    request<{ ok: true }>(`/api/oauth/grants/${clientId}`, { method: "DELETE" }),
+  mcpActivity: (limit = 100) =>
+    request<{ activity: McpActivity[] }>(`/api/mcp/activity?limit=${limit}`),
 };
+
+export type McpScope = "read" | "write" | "delete";
+
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  key_prefix: string;
+  scopes: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+export interface OAuthGrant {
+  client_id: string;
+  client_name: string;
+  scopes: string | null;
+  connected_at: string;
+  last_used_at: string | null;
+}
+
+export interface McpActivity {
+  id: string;
+  source: "api_key" | "oauth";
+  credential: string;
+  tool: string;
+  ok: number;
+  error: string | null;
+  created_at: string;
+}

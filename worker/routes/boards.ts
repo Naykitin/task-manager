@@ -79,6 +79,13 @@ export async function deleteBoard(
   // remove time entries, tasks, and columns for this board ourselves.
   await env.DB.batch([
     env.DB.prepare(
+      `DELETE FROM task_links WHERE from_task_id IN (
+         SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.board_id = ?
+       ) OR to_task_id IN (
+         SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.board_id = ?
+       )`,
+    ).bind(boardId, boardId),
+    env.DB.prepare(
       `DELETE FROM time_entries WHERE task_id IN (
          SELECT t.id FROM tasks t
            JOIN columns c ON c.id = t.column_id
@@ -278,6 +285,10 @@ export async function deleteColumn(
 ): Promise<Response> {
   await assertColumnOwner(env, userId, columnId);
   await env.DB.batch([
+    env.DB.prepare(
+      `DELETE FROM task_links WHERE from_task_id IN (SELECT id FROM tasks WHERE column_id = ?)
+         OR to_task_id IN (SELECT id FROM tasks WHERE column_id = ?)`,
+    ).bind(columnId, columnId),
     env.DB.prepare(
       "DELETE FROM time_entries WHERE task_id IN (SELECT id FROM tasks WHERE column_id = ?)",
     ).bind(columnId),

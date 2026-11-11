@@ -80,9 +80,77 @@ the session cookie and is scoped to the logged-in user.
 | POST | `/api/voice-notes/:id/structure` | `{ board_id }` — Claude proposes tasks/links for that one board |
 | POST | `/api/voice-notes/:id/apply` | `{ new_tasks }` — writes the (edited) suggestions atomically |
 | POST | `/api/voice-notes/:id/discard` | mark a note `discarded` without creating tasks |
+| GET  | `/api/tasks/search?q=&board_id=&limit=` | text search over task titles/descriptions |
+| GET / POST | `/api/api-keys` | list / create MCP API keys `{ name, scopes? }` (session cookie only; plaintext key returned once) |
+| DELETE | `/api/api-keys/:id` | revoke a key |
+| POST | `/mcp` | **MCP server** (Streamable HTTP, API-key auth) — see below |
 
 `tzOffset` is minutes east of UTC (`-new Date().getTimezoneOffset()`); the client
 sends it automatically so day boundaries match your local day.
+
+---
+
+## MCP server (for Claude, Gemini CLI, Cursor, local agents, …)
+
+The Worker exposes a stateless **MCP server over Streamable HTTP** at
+`POST /mcp`, so any MCP-capable client or LLM provider can read and manage your
+boards, tasks and timers.
+
+1. Apply migrations:
+   ```bash
+   wrangler d1 execute task-manager-db --remote --file=migrations/0003_api_keys.sql
+   wrangler d1 execute task-manager-db --remote --file=migrations/0004_oauth.sql
+   wrangler d1 execute task-manager-db --remote --file=migrations/0005_mcp_audit.sql
+   wrangler d1 execute task-manager-db --remote --file=migrations/0006_perf_and_security.sql
+   ```
+   (For local dev: pass `--local` instead of `--remote`).
+2. Manage keys in the UI:
+   Sign into the web app and click the **Integrations** tab in the top navigation.
+   You can create API keys with custom scopes (`read`, `write`, `delete`), copy the plaintext key, revoke keys, manage connected OAuth applications, and inspect the real-time MCP tool activity audit log.
+   (Alternatively, create via curl: `POST /api/api-keys`).
+3. Point your client at `https://<your-worker>/mcp` with header
+   `Authorization: Bearer tm_…` (or `X-API-Key: tm_…`).
+
+### Stdio-only clients (Claude Desktop, local agents)
+
+If your client only supports local `stdio` subprocesses instead of HTTP:
+```json
+{
+  "mcpServers": {
+    "task-manager": {
+      "command": "node",
+      "args": ["scripts/mcp-stdio-bridge.mjs"],
+      "env": {
+        "TASK_MANAGER_MCP_URL": "https://<your-worker>/mcp",
+        "TASK_MANAGER_API_KEY": "tm_..."
+      }
+    }
+  }
+}
+```
+Or run `npm run mcp:bridge`.
+
+Tools: `list_boards`, `get_board`, `search_tasks`, `get_task`, `get_active_timer`,
+`get_timesheet` (read); `create_board`, `create_column`, `create_task`,
+`bulk_create_tasks`, `update_task`, `move_task`, `link_tasks`, `start_timer`,
+`stop_timer` (write); `delete_task`, `delete_column`, `delete_board` (delete).
+Also resources (`taskmanager://boards`, `taskmanager://active-timer`) and prompts
+(`daily_standup`, `break_down_goal`). Browser callers must be listed in the
+optional `MCP_ALLOWED_ORIGINS` var; non-browser clients send no Origin and are
+unaffected.
+
+### OAuth (Claude.ai, ChatGPT and other web connectors)
+
+Web connectors can't send a static header, so the Worker is also an **OAuth 2.1
+authorization server** (authorization code + PKCE S256, dynamic client
+registration, refresh-token rotation with reuse detection). Apply
+`migrations/0004_oauth.sql` (remote: `wrangler d1 execute task-manager-db --remote --file=migrations/0004_oauth.sql`)
+and redeploy, then in the client add a custom connector with just the URL
+`https://<your-worker>/mcp`. It discovers everything via
+`/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`,
+opens `/oauth/authorize` where you sign in with your normal account and pick the
+permissions (`delete` is off by default), and receives a 1 h access token plus a
+30-day rotating refresh token. OAuth tokens give the same scopes as API keys.
 
 ---
 

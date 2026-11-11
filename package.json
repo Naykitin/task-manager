@@ -10,7 +10,8 @@
     "deploy": "vite build && wrangler deploy",
     "cf-typegen": "wrangler types",
     "db:local": "wrangler d1 execute task-manager-db --local --file=./schema.sql",
-    "db:remote": "wrangler d1 execute task-manager-db --remote --file=./schema.sql"
+    "db:remote": "wrangler d1 execute task-manager-db --remote --file=./schema.sql",
+    "mcp:bridge": "node scripts/mcp-stdio-bridge.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
