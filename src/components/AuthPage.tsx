@@ -34,7 +34,8 @@ export function AuthPage() {
     <div className="center-screen">
       <form className="auth-card" onSubmit={onSubmit}>
         <div className="auth-brand">
-          <span className="brand-mark">◆</span> Task Manager
+          <span className="brand-mark">◆</span> NayFlow
+          <span className="brand-by">by Naykitin</span>
         </div>
         <h1 className="auth-title">
           {mode === "login" ? "Welcome back" : "Create your account"}

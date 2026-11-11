@@ -7,10 +7,30 @@ import * as tasks from "./routes/tasks.ts";
 import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
 import * as voice from "./routes/voice.ts";
+import * as apikeys from "./apikeys.ts";
+import * as integrations from "./routes/integrations.ts";
+import { allow, clientIp, tooManyRequests } from "./ratelimit.ts";
+import { handleMcp } from "./mcp/server.ts";
+import { handleOAuth } from "./oauth.ts";
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+
+    // OAuth discovery + authorization server for remote MCP clients.
+    if (url.pathname.startsWith("/oauth/") || url.pathname.startsWith("/.well-known/")) {
+      return handleOAuth(req, env, url, ctx);
+    }
+
+    // MCP endpoint (Streamable HTTP). Has its own API-key auth + CORS rules.
+    if (url.pathname === "/mcp") {
+      try {
+        return await handleMcp(req, env, ctx);
+      } catch (e) {
+        console.error("MCP error:", e);
+        return error(500, "Internal server error");
+      }
+    }
 
     // Only /api/* reaches the Worker (run_worker_first). Anything else is a
     // static asset; delegate defensively just in case.
@@ -36,6 +56,13 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   // ---- Public auth routes ----
   if (a === "auth") {
+    if (
+      (b === "login" || b === "register") &&
+      method === "POST" &&
+      !(await allow(env.AUTH_LIMITER, `auth:${clientIp(req)}`))
+    ) {
+      return tooManyRequests();
+    }
     if (b === "register" && method === "POST") return authRoutes.register(req, env);
     if (b === "login" && method === "POST") return authRoutes.login(req, env);
     if (b === "logout" && method === "POST") return authRoutes.logout();
@@ -68,7 +95,30 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     if (method === "DELETE") return boards.deleteColumn(b, userId, env);
   }
 
+  // ---- API keys (for the MCP endpoint; session-cookie only) ----
+  if (a === "api-keys" && !b) {
+    if (method === "GET") return apikeys.listApiKeys(userId, env);
+    if (method === "POST") return apikeys.createApiKey(req, userId, env);
+  }
+  if (a === "api-keys" && b && !c && method === "DELETE") {
+    return apikeys.revokeApiKey(b, userId, env);
+  }
+
+  // ---- Integrations UI: connected OAuth apps + MCP activity ----
+  if (a === "oauth" && b === "grants" && !c && method === "GET") {
+    return integrations.listGrants(userId, env);
+  }
+  if (a === "oauth" && b === "grants" && c && !d && method === "DELETE") {
+    return integrations.revokeGrant(c, userId, env);
+  }
+  if (a === "mcp" && b === "activity" && !c && method === "GET") {
+    return integrations.listActivity(url, userId, env);
+  }
+
   // ---- Tasks ----
+  if (a === "tasks" && b === "search" && !c && method === "GET") {
+    return tasks.searchTasks(url, userId, env);
+  }
   if (a === "tasks" && !b && method === "POST") {
     return tasks.createTask(req, userId, env);
   }

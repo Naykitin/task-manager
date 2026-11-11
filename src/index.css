@@ -188,12 +188,21 @@ textarea {
   box-shadow: var(--shadow);
 }
 .auth-brand {
-  color: var(--text-dim);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--text);
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 .brand-mark {
   color: var(--accent);
+}
+.brand-by {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
 }
 .auth-title {
   margin: 14px 0 4px;
@@ -274,6 +283,9 @@ input[type="datetime-local"]:focus {
   z-index: 10;
 }
 .brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
   font-weight: 700;
   letter-spacing: 0.01em;
 }
@@ -999,3 +1011,15 @@ input[type="datetime-local"]:focus {
     box-shadow: 0 0 0 8px rgba(239, 95, 107, 0);
   }
 }
+
+/* ---- Integrations (MCP) ---- */
+.integrations { max-width: 960px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+.int-card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; }
+.int-card h2 { margin: 0 0 .6rem; font-size: 1.05rem; }
+.int-card code { font-family: var(--mono); font-size: .85rem; word-break: break-all; }
+.int-head { display: flex; justify-content: space-between; align-items: center; }
+.int-form { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; margin-bottom: .8rem; }
+.int-input { flex: 1 1 14rem; padding: .5rem .7rem; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+.int-scopes { display: flex; gap: .9rem; color: var(--text-dim); }
+.int-newkey { display: grid; gap: .5rem; padding: .8rem; margin-bottom: .8rem; border: 1px solid var(--amber); border-radius: 8px; background: var(--bg-elev); }
+.int-revoked { opacity: .5; }

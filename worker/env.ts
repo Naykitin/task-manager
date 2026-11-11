@@ -7,4 +7,13 @@ export interface Env {
   INVITE_CODE: string;
   /** Claude API key for voice-note structuring. Set via `wrangler secret put ANTHROPIC_API_KEY`. */
   ANTHROPIC_API_KEY: string;
+  /**
+   * Optional comma-separated browser Origins allowed to call /mcp (e.g.
+   * "https://claude.ai"). Requests without an Origin header (CLI/server
+   * clients) are always allowed once authenticated.
+   */
+  MCP_ALLOWED_ORIGINS?: string;
+  /** Rate limiting bindings (wrangler.jsonc "ratelimits"); optional. */
+  MCP_LIMITER?: RateLimit;
+  AUTH_LIMITER?: RateLimit;
 }
