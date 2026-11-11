@@ -120,6 +120,51 @@ export async function updateTask(
   return json({ task });
 }
 
+/**
+ * GET /api/tasks/search?q=&board_id=&limit= — case-insensitive substring
+ * match on title/description across the user's tasks.
+ */
+export async function searchTasks(
+  url: URL,
+  userId: string,
+  env: Env,
+): Promise<Response> {
+  const q = (url.searchParams.get("q") ?? "").trim();
+  if (!q) throw new HttpError(400, "q is required");
+  if (q.length > 200) throw new HttpError(400, "q is too long (max 200)");
+  const boardId = url.searchParams.get("board_id");
+  const limit = Math.min(
+    Math.max(Number(url.searchParams.get("limit") ?? "25") || 25, 1),
+    100,
+  );
+  const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
+  const binds: unknown[] = [userId, like, like];
+  let boardFilter = "";
+  if (boardId) {
+    boardFilter = "AND b.id = ?";
+    binds.push(boardId);
+  }
+  binds.push(limit);
+
+  const { results } = await env.DB.prepare(
+    `SELECT t.id, t.title, t.description, t.updated_at,
+            c.id AS column_id, c.name AS column_name,
+            b.id AS board_id, b.name AS board_name
+       FROM tasks t
+       JOIN columns c ON c.id = t.column_id
+       JOIN boards b ON b.id = c.board_id
+      WHERE b.user_id = ?
+        AND (t.title LIKE ? ESCAPE '\\' OR COALESCE(t.description, '') LIKE ? ESCAPE '\\')
+        ${boardFilter}
+      ORDER BY t.updated_at DESC
+      LIMIT ?`,
+  )
+    .bind(...binds)
+    .all();
+  return json({ tasks: results });
+}
+
 export async function deleteTask(
   taskId: string,
   userId: string,
@@ -127,6 +172,10 @@ export async function deleteTask(
 ): Promise<Response> {
   await assertTaskOwner(env, userId, taskId);
   await env.DB.batch([
+    env.DB.prepare("DELETE FROM task_links WHERE from_task_id = ? OR to_task_id = ?").bind(
+      taskId,
+      taskId,
+    ),
     env.DB.prepare("DELETE FROM time_entries WHERE task_id = ?").bind(taskId),
     env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(taskId),
   ]);

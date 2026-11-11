@@ -3,8 +3,9 @@ import { useAuth } from "./auth.tsx";
 import { AuthPage } from "./components/AuthPage.tsx";
 import { BoardView } from "./components/BoardView.tsx";
 import { Timesheet } from "./components/Timesheet.tsx";
+import { Integrations } from "./components/Integrations.tsx";
 
-type View = "board" | "timesheet";
+type View = "board" | "timesheet" | "integrations";
 
 export function App() {
   const { user, loading, logout } = useAuth();
@@ -24,7 +25,8 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">◆</span> Task&nbsp;Manager
+          <span className="brand-mark">◆</span> NayFlow
+          <span className="brand-by">by Naykitin</span>
         </div>
         <nav className="tabs">
           <button
@@ -39,6 +41,12 @@ export function App() {
           >
             Timesheet
           </button>
+          <button
+            className={view === "integrations" ? "tab active" : "tab"}
+            onClick={() => setView("integrations")}
+          >
+            Integrations
+          </button>
         </nav>
         <div className="topbar-right">
           <span className="user-email">{user.email}</span>
@@ -51,6 +59,7 @@ export function App() {
       <main className="main">
         {view === "board" && <BoardView />}
         {view === "timesheet" && <Timesheet />}
+        {view === "integrations" && <Integrations />}
       </main>
     </div>
   );

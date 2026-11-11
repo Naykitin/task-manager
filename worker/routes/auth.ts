@@ -13,7 +13,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Fixed dummy hash used to run a real PBKDF2 derivation for unknown emails
 // too, so login response time doesn't leak whether an account exists.
-const DUMMY_PASSWORD_HASH =
+export const DUMMY_PASSWORD_HASH =
   "pbkdf2$100000$AQIDBAUGBwgJCgsMDQ4PEA==$AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=";
 
 /** Seed a fresh account with one default board + To Do / In Progress / Done. */

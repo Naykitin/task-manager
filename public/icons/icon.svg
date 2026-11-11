@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#161b22" />
+      <stop offset="100%" stop-color="#0e1116" />
+    </linearGradient>
+    <linearGradient id="diamondGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6d8bff" />
+      <stop offset="50%" stop-color="#7e85ff" />
+      <stop offset="100%" stop-color="#8a7dff" />
+    </linearGradient>
+    <linearGradient id="innerGlow" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#6d8bff" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+  <rect width="508" height="508" x="2" y="2" rx="110" fill="none" stroke="#262d38" stroke-width="3" />
+
+  <!-- Flow diamond mark -->
+  <g filter="url(#glow)">
+    <polygon points="256,104 388,256 256,408 124,256" fill="url(#diamondGrad)" />
+    <!-- Subtle top facet highlight -->
+    <polygon points="256,104 388,256 256,256 124,256" fill="url(#innerGlow)" />
+  </g>
+</svg>
