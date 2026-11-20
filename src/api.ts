@@ -3,7 +3,10 @@ import type {
   Board,
   BoardDetail,
   ChecklistItem,
+  Client,
   Column,
+  PomodoroSession,
+  PomodoroSettings,
   StructuringResult,
   Task,
   TimeEntry,
@@ -29,8 +32,25 @@ import { clientId } from "./live.ts";
 export interface AppSettings {
   voice_enabled: boolean;
   auto_stop_hours: number;
+  pomodoro: PomodoroSettings;
   anthropic: { configured: boolean; source: "user" | "server" | null; last4: string | null };
   encryption_available: boolean;
+}
+
+export interface ClientInput {
+  name: string;
+  color?: string | null;
+  is_personal?: boolean;
+  rate_minor?: number | null;
+  currency?: string;
+}
+
+/** "" = all clients, "none" = boards without a client, else a client id. */
+const clientQuery = (id: string) => (id ? `&client_id=${encodeURIComponent(id)}` : "");
+
+export interface PomodoroState {
+  session: PomodoroSession | null;
+  settings: PomodoroSettings;
 }
 
 export class ApiError extends Error {
@@ -88,13 +108,13 @@ export const api = {
 
   // ---- Boards / columns ----
   listBoards: () => request<{ boards: Board[] }>("/api/boards"),
-  createBoard: (name: string) =>
+  createBoard: (name: string, client_id?: string | null) =>
     request<{ board: Board }>("/api/boards", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, client_id }),
     }),
   getBoard: (id: string) => request<{ board: BoardDetail }>(`/api/boards/${id}`),
-  updateBoard: (id: string, patch: { name?: string }) =>
+  updateBoard: (id: string, patch: { name?: string; client_id?: string | null; pomodoro_enabled?: boolean }) =>
     request<{ board: Board }>(`/api/boards/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -118,6 +138,31 @@ export const api = {
     }),
   deleteColumn: (id: string) =>
     request<{ ok: true }>(`/api/columns/${id}`, { method: "DELETE" }),
+
+  // ---- Clients ----
+  listClients: () => request<{ clients: Client[] }>("/api/clients"),
+  createClient: (body: ClientInput) =>
+    request<{ client: Client }>("/api/clients", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateClient: (id: string, patch: Partial<ClientInput> & { archived?: boolean }) =>
+    request<{ client: Client }>(`/api/clients/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteClient: (id: string) =>
+    request<{ ok: true }>(`/api/clients/${id}`, { method: "DELETE" }),
+
+  // ---- Pomodoro ----
+  pomodoro: () => request<PomodoroState>("/api/pomodoro"),
+  pomodoroStart: (task_id: string) =>
+    request<PomodoroState>("/api/pomodoro/start", {
+      method: "POST",
+      body: JSON.stringify({ task_id }),
+    }),
+  pomodoroAction: (action: "next" | "pause" | "resume" | "skip" | "stop") =>
+    request<PomodoroState>(`/api/pomodoro/${action}`, { method: "POST", body: "{}" }),
 
   // ---- Tasks ----
   createTask: (column_id: string, title: string, description?: string) =>
@@ -210,7 +255,11 @@ export const api = {
 
   // ---- Settings & account ----
   getSettings: () => request<AppSettings>("/api/settings"),
-  updateSettings: (patch: { voice_enabled?: boolean; auto_stop_hours?: number }) =>
+  updateSettings: (patch: {
+    voice_enabled?: boolean;
+    auto_stop_hours?: number;
+    pomodoro?: Partial<PomodoroSettings>;
+  }) =>
     request<AppSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   saveAnthropicKey: (key: string) =>
     request<AppSettings>("/api/settings/anthropic-key", {
@@ -240,15 +289,15 @@ export const api = {
     }),
 
   // ---- Timesheet ----
-  timesheet: (start: string, end: string) => {
+  timesheet: (start: string, end: string, clientId = "") => {
     const tzOffset = -new Date().getTimezoneOffset();
     return request<TimesheetResponse>(
-      `/api/timesheet?start=${start}&end=${end}&tzOffset=${tzOffset}`,
+      `/api/timesheet?start=${start}&end=${end}&tzOffset=${tzOffset}${clientQuery(clientId)}`,
     );
   },
-  timesheetExportUrl: (start: string, end: string) => {
+  timesheetExportUrl: (start: string, end: string, clientId = "") => {
     const tzOffset = -new Date().getTimezoneOffset();
-    return `/api/timesheet/export?start=${start}&end=${end}&tzOffset=${tzOffset}`;
+    return `/api/timesheet/export?start=${start}&end=${end}&tzOffset=${tzOffset}${clientQuery(clientId)}`;
   },
 
   // ---- Integrations (MCP) ----

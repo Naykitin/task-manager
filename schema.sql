@@ -21,13 +21,30 @@ CREATE TABLE IF NOT EXISTS users (
   sessions_valid_after TEXT
 );
 
+-- Clients group boards for per-customer time and money (migrations/0009_clients.sql).
+CREATE TABLE IF NOT EXISTS clients (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  color       TEXT,
+  is_personal INTEGER NOT NULL DEFAULT 0 CHECK (is_personal IN (0, 1)),
+  rate_minor  INTEGER CHECK (rate_minor IS NULL OR rate_minor >= 0),
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  archived_at TEXT,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_clients_user ON clients(user_id);
+
 CREATE TABLE IF NOT EXISTS boards (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
+  client_id  TEXT REFERENCES clients(id) ON DELETE SET NULL,
+  pomodoro_enabled INTEGER NOT NULL DEFAULT 0 CHECK (pomodoro_enabled IN (0, 1)),
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_boards_user ON boards(user_id);
+CREATE INDEX IF NOT EXISTS idx_boards_client ON boards(client_id) WHERE client_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS columns (
   id       TEXT PRIMARY KEY,
@@ -82,7 +99,9 @@ CREATE TABLE IF NOT EXISTS time_entries (
   user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   started_at       TEXT NOT NULL,
   ended_at         TEXT,
-  duration_seconds INTEGER
+  duration_seconds INTEGER,
+  rate_minor       INTEGER, -- rate snapshot when started (0009)
+  currency         TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);
@@ -214,5 +233,33 @@ CREATE TABLE IF NOT EXISTS user_settings (
   auto_stop_hours     INTEGER NOT NULL DEFAULT 0 CHECK (auto_stop_hours BETWEEN 0 AND 72),
   anthropic_key_enc   TEXT,
   anthropic_key_last4 TEXT,
+  pomo_focus_min      INTEGER NOT NULL DEFAULT 25 CHECK (pomo_focus_min  BETWEEN 1 AND 180),
+  pomo_short_min      INTEGER NOT NULL DEFAULT 5  CHECK (pomo_short_min  BETWEEN 1 AND 60),
+  pomo_long_min       INTEGER NOT NULL DEFAULT 15 CHECK (pomo_long_min   BETWEEN 1 AND 120),
+  pomo_long_every     INTEGER NOT NULL DEFAULT 4  CHECK (pomo_long_every BETWEEN 2 AND 12),
+  pomo_auto_start     INTEGER NOT NULL DEFAULT 0  CHECK (pomo_auto_start IN (0, 1)),
   updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- Pomodoro (see migrations/0010_pomodoro.sql).
+CREATE TABLE IF NOT EXISTS pomodoro_sessions (
+  user_id          TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  task_id          TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  phase            TEXT NOT NULL CHECK (phase IN ('focus', 'short_break', 'long_break')),
+  status           TEXT NOT NULL CHECK (status IN ('running', 'paused', 'waiting')),
+  phase_started_at TEXT,
+  phase_ends_at    TEXT,
+  remaining_ms     INTEGER,
+  cycle            INTEGER NOT NULL DEFAULT 0,
+  updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_pomodoro_sessions_task ON pomodoro_sessions(task_id);
+
+CREATE TABLE IF NOT EXISTS pomodoro_done (
+  id           TEXT PRIMARY KEY,
+  user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  task_id      TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  completed_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pomodoro_done_task ON pomodoro_done(task_id);
+CREATE INDEX IF NOT EXISTS idx_pomodoro_done_user ON pomodoro_done(user_id, completed_at);

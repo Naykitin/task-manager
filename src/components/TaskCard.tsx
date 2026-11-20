@@ -10,6 +10,8 @@ interface Props {
   busy: boolean;
   onStart: (task: Task) => void;
   onStop: (task: Task) => void;
+  pomodoroEnabled: boolean;
+  onPomodoro: (task: Task) => void;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
   onHistory: (task: Task) => void;
@@ -32,6 +34,8 @@ export function TaskCard({
   busy,
   onStart,
   onStop,
+  pomodoroEnabled,
+  onPomodoro,
   onEdit,
   onDelete,
   onHistory,
@@ -141,6 +145,11 @@ export function TaskCard({
           {running ? formatClock(displayTotal) : formatDuration(displayTotal)}
         </span>
         {running && <span className="rec-dot" aria-label="recording" />}
+        {(task.pomodoro_count ?? 0) > 0 && (
+          <span className="pomo-count" title="Completed Pomodoro focus intervals">
+            🍅 {task.pomodoro_count}
+          </span>
+        )}
       </div>
 
       <div className="card-actions">
@@ -159,6 +168,16 @@ export function TaskCard({
             onClick={() => onStart(task)}
           >
             ▶ Start
+          </button>
+        )}
+        {pomodoroEnabled && !running && (
+          <button
+            className="btn ghost sm"
+            disabled={busy}
+            title="Start a Pomodoro focus interval"
+            onClick={() => onPomodoro(task)}
+          >
+            🍅
           </button>
         )}
         <div className="card-actions-right">

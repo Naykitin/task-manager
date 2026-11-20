@@ -11,7 +11,22 @@ export interface Board {
   id: string;
   user_id: string;
   name: string;
+  client_id: string | null;
+  /** 1 = the Pomodoro button is available on this board. */
+  pomodoro_enabled: number;
   created_at: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  color: string | null;
+  is_personal: boolean;
+  /** Hourly rate in minor units (cents); null = not billed. */
+  rate_minor: number | null;
+  currency: string;
+  archived_at: string | null;
+  board_count?: number;
 }
 
 export interface Column {
@@ -44,6 +59,7 @@ export interface Task {
   running_entry: TimeEntry | null; // the active (unstopped) entry, if any
   links: TaskLinkView[]; // this task's relations to other tasks
   checklist: ChecklistItem[]; // ordered steps that can be ticked off
+  pomodoro_count?: number; // completed focus intervals (board endpoint only)
 }
 
 export interface TimeEntry {
@@ -70,6 +86,7 @@ export interface TimesheetTaskRow {
   task_title: string;
   board_id: string;
   board_name: string;
+  client_name?: string | null;
   duration_seconds: number;
 }
 
@@ -101,6 +118,22 @@ export interface TimesheetResponse {
   days: TimesheetDay[];
   by_board: TimesheetBoardTotal[];
   by_task: TimesheetTaskTotal[];
+  by_client: TimesheetClientTotal[];
+  /** Money for the period, one row per currency (no conversion). */
+  amounts: MoneyAmount[];
+}
+
+export interface MoneyAmount {
+  currency: string;
+  amount_minor: number;
+}
+
+export interface TimesheetClientTotal {
+  client_id: string | null; // null = boards without a client
+  client_name: string;
+  color: string | null;
+  duration_seconds: number;
+  amounts: MoneyAmount[];
 }
 
 // ---- Voice-note structuring ----
@@ -203,4 +236,33 @@ export interface ApplyNewTaskInput {
 
 export interface ApiError {
   error: string;
+}
+
+// ---- Pomodoro ----
+
+export type PomodoroPhase = "focus" | "short_break" | "long_break";
+
+export interface PomodoroSettings {
+  focus_min: number;
+  short_min: number;
+  long_min: number;
+  long_every: number;
+  auto_start: boolean;
+}
+
+export interface PomodoroSession {
+  task_id: string;
+  task_title: string;
+  board_id: string;
+  phase: PomodoroPhase;
+  /** running: counting down | paused: frozen | waiting: phase queued, press Start. */
+  status: "running" | "paused" | "waiting";
+  phase_started_at: string | null;
+  phase_ends_at: string | null; // set while running
+  /** Seconds left while paused, or the full length of the queued phase while waiting. */
+  remaining_seconds: number | null;
+  /** Full length of the current phase, in seconds. */
+  duration_seconds: number;
+  /** Focus intervals completed in this session. */
+  cycle: number;
 }

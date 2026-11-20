@@ -3,6 +3,7 @@ import type { TimeEntry } from "../../shared/types.ts";
 import { assertTaskOwner, assertTimeEntryOwner } from "../db.ts";
 import { HttpError, json, newId, nowIso, readJson } from "../util.ts";
 import { cappedEnd, getAutoStopHours } from "../lib/autostop.ts";
+import { clearPomodoroSession } from "../lib/pomodoro.ts";
 
 function durationSeconds(startedAt: string, endedAt: string): number {
   const secs = Math.round(
@@ -19,8 +20,27 @@ function parseIsoDate(value: unknown, field: string): string {
   return new Date(value).toISOString();
 }
 
+/** The client's rate in force right now for a task's board (null/null if none). */
+async function rateSnapshot(
+  env: Env,
+  taskId: string,
+): Promise<{ rate_minor: number | null; currency: string | null }> {
+  const row = await env.DB.prepare(
+    `SELECT cl.rate_minor, cl.currency
+       FROM tasks t
+       JOIN columns c  ON c.id = t.column_id
+       JOIN boards b   ON b.id = c.board_id
+       JOIN clients cl ON cl.id = b.client_id
+      WHERE t.id = ?`,
+  )
+    .bind(taskId)
+    .first<{ rate_minor: number | null; currency: string }>();
+  if (!row || row.rate_minor === null) return { rate_minor: null, currency: null };
+  return row;
+}
+
 /** Stop whatever timer the user currently has running. Returns it if any. */
-async function stopRunningForUser(
+export async function stopRunningForUser(
   env: Env,
   userId: string,
   endedAt: string,
@@ -44,23 +64,24 @@ async function stopRunningForUser(
   return { ...running, ended_at: endedAt, duration_seconds: duration };
 }
 
-/** POST /api/tasks/:id/timer/start */
-export async function startTimer(
-  taskId: string,
-  userId: string,
+/**
+ * Starts a timer on a task at `now`, first stopping whatever the user had
+ * running (a single active timer is enforced). Shared with Pomodoro focus.
+ */
+export async function openEntry(
   env: Env,
-): Promise<Response> {
-  await assertTaskOwner(env, userId, taskId);
-  const now = nowIso();
-
-  // Enforce a single active timer: stop any currently running one first.
+  userId: string,
+  taskId: string,
+  now: string,
+): Promise<{ entry: TimeEntry; stopped: TimeEntry | null }> {
   const stopped = await stopRunningForUser(env, userId, now);
 
   const id = newId();
+  const snap = await rateSnapshot(env, taskId);
   await env.DB.prepare(
-    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?, NULL, NULL)",
+    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds, rate_minor, currency) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)",
   )
-    .bind(id, taskId, userId, now)
+    .bind(id, taskId, userId, now, snap.rate_minor, snap.currency)
     .run();
 
   const entry: TimeEntry = {
@@ -71,6 +92,19 @@ export async function startTimer(
     ended_at: null,
     duration_seconds: null,
   };
+  return { entry, stopped };
+}
+
+/** POST /api/tasks/:id/timer/start */
+export async function startTimer(
+  taskId: string,
+  userId: string,
+  env: Env,
+): Promise<Response> {
+  await assertTaskOwner(env, userId, taskId);
+  // Starting a timer by hand ends any Pomodoro session.
+  await clearPomodoroSession(env, userId);
+  const { entry, stopped } = await openEntry(env, userId, taskId, nowIso());
   return json({ entry, stopped }, { status: 201 });
 }
 
@@ -81,6 +115,7 @@ export async function stopTimer(
   env: Env,
 ): Promise<Response> {
   await assertTaskOwner(env, userId, taskId);
+  await clearPomodoroSession(env, userId);
   const now = nowIso();
 
   const running = await env.DB.prepare(
@@ -142,10 +177,11 @@ export async function createManualEntry(
 
   const id = newId();
   const duration = durationSeconds(startedAt, endedAt);
+  const snap = await rateSnapshot(env, taskId);
   await env.DB.prepare(
-    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds, rate_minor, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(id, taskId, userId, startedAt, endedAt, duration)
+    .bind(id, taskId, userId, startedAt, endedAt, duration, snap.rate_minor, snap.currency)
     .run();
 
   const entry: TimeEntry = {

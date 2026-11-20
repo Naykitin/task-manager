@@ -10,13 +10,14 @@ import type {
   TaskLinkView,
   TimeEntry,
 } from "../../shared/types.ts";
-import { assertBoardOwner, assertColumnOwner } from "../db.ts";
+import { assertBoardOwner, assertClientOwner, assertColumnOwner } from "../db.ts";
 import { autoStopExpired } from "../lib/autostop.ts";
+import { endSessionOnBoard } from "./pomodoro.ts";
 import { HttpError, json, newId, readJson, requireString } from "../util.ts";
 
 export async function listBoards(userId: string, env: Env): Promise<Response> {
   const { results } = await env.DB.prepare(
-    "SELECT id, user_id, name, created_at FROM boards WHERE user_id = ? ORDER BY created_at ASC",
+    "SELECT id, user_id, name, client_id, pomodoro_enabled, created_at FROM boards WHERE user_id = ? ORDER BY created_at ASC",
   )
     .bind(userId)
     .all<Board>();
@@ -28,11 +29,13 @@ export async function createBoard(
   userId: string,
   env: Env,
 ): Promise<Response> {
-  const body = await readJson<{ name?: string }>(req);
+  const body = await readJson<{ name?: string; client_id?: string | null }>(req);
   const name = requireString(body.name, "name", { max: 100 });
+  const clientId = typeof body.client_id === "string" && body.client_id ? body.client_id : null;
+  if (clientId) await assertClientOwner(env, userId, clientId);
   const id = newId();
-  await env.DB.prepare("INSERT INTO boards (id, user_id, name) VALUES (?, ?, ?)")
-    .bind(id, userId, name)
+  await env.DB.prepare("INSERT INTO boards (id, user_id, name, client_id) VALUES (?, ?, ?, ?)")
+    .bind(id, userId, name, clientId)
     .run();
   // Seed the usual three columns.
   const stmts = ["To Do", "In Progress", "Done"].map((n, i) =>
@@ -42,14 +45,14 @@ export async function createBoard(
   );
   await env.DB.batch(stmts);
   const board = await env.DB.prepare(
-    "SELECT id, user_id, name, created_at FROM boards WHERE id = ?",
+    "SELECT id, user_id, name, client_id, pomodoro_enabled, created_at FROM boards WHERE id = ?",
   )
     .bind(id)
     .first<Board>();
   return json({ board }, { status: 201 });
 }
 
-/** PATCH /api/boards/:id — currently just renames the board. */
+/** PATCH /api/boards/:id — rename and/or assign to a client (client_id null detaches). */
 export async function updateBoard(
   req: Request,
   boardId: string,
@@ -57,13 +60,41 @@ export async function updateBoard(
   env: Env,
 ): Promise<Response> {
   await assertBoardOwner(env, userId, boardId);
-  const body = await readJson<{ name?: string }>(req);
-  const name = requireString(body.name, "name", { max: 100 });
-  await env.DB.prepare("UPDATE boards SET name = ? WHERE id = ?")
-    .bind(name, boardId)
+  const body = await readJson<{
+    name?: string;
+    client_id?: string | null;
+    pomodoro_enabled?: boolean;
+  }>(req);
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (body.name !== undefined) {
+    sets.push("name = ?");
+    binds.push(requireString(body.name, "name", { max: 100 }));
+  }
+  if (body.client_id !== undefined) {
+    if (body.client_id !== null && typeof body.client_id !== "string") {
+      throw new HttpError(400, "client_id must be a string or null");
+    }
+    if (body.client_id) await assertClientOwner(env, userId, body.client_id);
+    sets.push("client_id = ?");
+    binds.push(body.client_id || null);
+  }
+  if (body.pomodoro_enabled !== undefined) {
+    if (typeof body.pomodoro_enabled !== "boolean") {
+      throw new HttpError(400, "pomodoro_enabled must be true or false");
+    }
+    sets.push("pomodoro_enabled = ?");
+    binds.push(body.pomodoro_enabled ? 1 : 0);
+  }
+  if (sets.length === 0) throw new HttpError(400, "Nothing to update");
+  binds.push(boardId);
+  await env.DB.prepare(`UPDATE boards SET ${sets.join(", ")} WHERE id = ?`)
+    .bind(...binds)
     .run();
+  // Switching Pomodoro off ends a session running on this board.
+  if (body.pomodoro_enabled === false) await endSessionOnBoard(env, userId, boardId);
   const board = await env.DB.prepare(
-    "SELECT id, user_id, name, created_at FROM boards WHERE id = ?",
+    "SELECT id, user_id, name, client_id, pomodoro_enabled, created_at FROM boards WHERE id = ?",
   )
     .bind(boardId)
     .first<Board>();
@@ -98,6 +129,14 @@ export async function deleteBoard(
          SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.board_id = ?)`,
     ).bind(boardId),
     env.DB.prepare(
+      `DELETE FROM pomodoro_done WHERE task_id IN (
+         SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.board_id = ?)`,
+    ).bind(boardId),
+    env.DB.prepare(
+      `DELETE FROM pomodoro_sessions WHERE task_id IN (
+         SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.board_id = ?)`,
+    ).bind(boardId),
+    env.DB.prepare(
       "DELETE FROM tasks WHERE column_id IN (SELECT id FROM columns WHERE board_id = ?)",
     ).bind(boardId),
     env.DB.prepare("DELETE FROM columns WHERE board_id = ?").bind(boardId),
@@ -117,7 +156,7 @@ export async function getBoard(
 ): Promise<Response> {
   await autoStopExpired(env, userId);
   const board = await env.DB.prepare(
-    "SELECT id, user_id, name, created_at FROM boards WHERE id = ? AND user_id = ?",
+    "SELECT id, user_id, name, client_id, pomodoro_enabled, created_at FROM boards WHERE id = ? AND user_id = ?",
   )
     .bind(boardId, userId)
     .first<Board>();
@@ -133,7 +172,8 @@ export async function getBoard(
   const tasks = await env.DB.prepare(
     `SELECT t.id, t.column_id, t.title, t.description, t.position,
             t.created_at, t.updated_at, t.source, t.origin_voice_note_id,
-            COALESCE(SUM(te.duration_seconds), 0) AS total_seconds
+            COALESCE(SUM(te.duration_seconds), 0) AS total_seconds,
+            (SELECT COUNT(*) FROM pomodoro_done pd WHERE pd.task_id = t.id) AS pomodoro_count
        FROM tasks t
        JOIN columns c ON c.id = t.column_id
        LEFT JOIN time_entries te
@@ -375,6 +415,12 @@ export async function deleteColumn(
     ).bind(columnId),
     env.DB.prepare(
       "DELETE FROM task_checklist_items WHERE task_id IN (SELECT id FROM tasks WHERE column_id = ?)",
+    ).bind(columnId),
+    env.DB.prepare(
+      "DELETE FROM pomodoro_done WHERE task_id IN (SELECT id FROM tasks WHERE column_id = ?)",
+    ).bind(columnId),
+    env.DB.prepare(
+      "DELETE FROM pomodoro_sessions WHERE task_id IN (SELECT id FROM tasks WHERE column_id = ?)",
     ).bind(columnId),
     env.DB.prepare("DELETE FROM tasks WHERE column_id = ?").bind(columnId),
     env.DB.prepare("DELETE FROM columns WHERE id = ?").bind(columnId),

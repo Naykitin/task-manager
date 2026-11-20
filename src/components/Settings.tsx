@@ -4,14 +4,18 @@ import { useAuth } from "../auth.tsx";
 import { getThemeMode, setThemeMode, type ThemeMode } from "../theme.ts";
 import { ConfirmModal } from "./ConfirmModal.tsx";
 import { CsvImport } from "./CsvImport.tsx";
+import { Clients } from "./Clients.tsx";
 import { Integrations } from "./Integrations.tsx";
+import { PomodoroSettings } from "./PomodoroSettings.tsx";
 
-type Section = "account" | "ai" | "time" | "appearance" | "data" | "integrations";
+type Section = "account" | "ai" | "time" | "pomodoro" | "clients" | "appearance" | "data" | "integrations";
 
 const SECTIONS: { id: Section; label: string }[] = [
   { id: "account", label: "Account" },
   { id: "ai", label: "AI & Voice" },
   { id: "time", label: "Time tracking" },
+  { id: "pomodoro", label: "Pomodoro" },
+  { id: "clients", label: "Clients" },
   { id: "appearance", label: "Appearance" },
   { id: "data", label: "Data" },
   { id: "integrations", label: "Integrations" },
@@ -360,6 +364,8 @@ export function Settings() {
         {section === "account" && <AccountSection />}
         {section === "ai" && <AiSection />}
         {section === "time" && <TimeSection />}
+        {section === "pomodoro" && <PomodoroSettings />}
+        {section === "clients" && <Clients />}
         {section === "appearance" && <AppearanceSection />}
         {section === "data" && <DataSection />}
         {section === "integrations" && <Integrations />}

@@ -1,5 +1,6 @@
 import type { Env } from "../env.ts";
 import { decryptSecret, encryptSecret, encryptionAvailable } from "../lib/secretbox.ts";
+import type { PomodoroSettings } from "../../shared/types.ts";
 import { HttpError, json, readJson } from "../util.ts";
 
 // Per-user settings: voice toggle, timer auto-stop, Anthropic API key.
@@ -9,18 +10,60 @@ interface SettingsRow {
   auto_stop_hours: number;
   anthropic_key_enc: string | null;
   anthropic_key_last4: string | null;
+  pomo_focus_min: number;
+  pomo_short_min: number;
+  pomo_long_min: number;
+  pomo_long_every: number;
+  pomo_auto_start: number;
 }
+
+const POMO_DEFAULTS = {
+  pomo_focus_min: 25,
+  pomo_short_min: 5,
+  pomo_long_min: 15,
+  pomo_long_every: 4,
+  pomo_auto_start: 0,
+};
+
+// Whole-number ranges (match the CHECK constraints in migration 0010).
+const POMO_RANGES: Record<string, [number, number]> = {
+  focus_min: [1, 180],
+  short_min: [1, 60],
+  long_min: [1, 120],
+  long_every: [2, 12],
+};
 
 async function loadRow(env: Env, userId: string): Promise<SettingsRow> {
   const row = await env.DB.prepare(
-    `SELECT voice_enabled, auto_stop_hours, anthropic_key_enc, anthropic_key_last4
+    `SELECT voice_enabled, auto_stop_hours, anthropic_key_enc, anthropic_key_last4,
+            pomo_focus_min, pomo_short_min, pomo_long_min, pomo_long_every, pomo_auto_start
        FROM user_settings WHERE user_id = ?`,
   )
     .bind(userId)
     .first<SettingsRow>();
   return (
-    row ?? { voice_enabled: 0, auto_stop_hours: 0, anthropic_key_enc: null, anthropic_key_last4: null }
+    row ?? {
+      voice_enabled: 0,
+      auto_stop_hours: 0,
+      anthropic_key_enc: null,
+      anthropic_key_last4: null,
+      ...POMO_DEFAULTS,
+    }
   );
+}
+
+function pomodoroView(row: SettingsRow): PomodoroSettings {
+  return {
+    focus_min: row.pomo_focus_min,
+    short_min: row.pomo_short_min,
+    long_min: row.pomo_long_min,
+    long_every: row.pomo_long_every,
+    auto_start: row.pomo_auto_start === 1,
+  };
+}
+
+export async function getPomodoroSettings(env: Env, userId: string): Promise<PomodoroSettings> {
+  return pomodoroView(await loadRow(env, userId));
 }
 
 export async function isVoiceEnabled(env: Env, userId: string): Promise<boolean> {
@@ -63,6 +106,7 @@ async function view(env: Env, userId: string) {
   return {
     voice_enabled: row.voice_enabled === 1,
     auto_stop_hours: row.auto_stop_hours,
+    pomodoro: pomodoroView(row),
     anthropic: {
       configured: resolved !== null,
       source: resolved?.source ?? null,
@@ -79,7 +123,11 @@ export async function getSettings(userId: string, env: Env): Promise<Response> {
 
 /** PATCH /api/settings - { voice_enabled?, auto_stop_hours? } */
 export async function updateSettings(req: Request, userId: string, env: Env): Promise<Response> {
-  const body = await readJson<{ voice_enabled?: unknown; auto_stop_hours?: unknown }>(req);
+  const body = await readJson<{
+    voice_enabled?: unknown;
+    auto_stop_hours?: unknown;
+    pomodoro?: Record<string, unknown>;
+  }>(req);
   const patch: Record<string, unknown> = {};
   if (body.voice_enabled !== undefined) {
     if (typeof body.voice_enabled !== "boolean") {
@@ -93,6 +141,22 @@ export async function updateSettings(req: Request, userId: string, env: Env): Pr
       throw new HttpError(400, "auto_stop_hours must be a whole number from 0 to 72");
     }
     patch.auto_stop_hours = h;
+  }
+  if (body.pomodoro !== undefined) {
+    const p = body.pomodoro;
+    if (typeof p !== "object" || p === null) throw new HttpError(400, "pomodoro must be an object");
+    for (const [key, [min, max]] of Object.entries(POMO_RANGES)) {
+      const v = p[key];
+      if (v === undefined) continue;
+      if (typeof v !== "number" || !Number.isInteger(v) || v < min || v > max) {
+        throw new HttpError(400, `${key} must be a whole number from ${min} to ${max}`);
+      }
+      patch[`pomo_${key}`] = v;
+    }
+    if (p.auto_start !== undefined) {
+      if (typeof p.auto_start !== "boolean") throw new HttpError(400, "auto_start must be true or false");
+      patch.pomo_auto_start = p.auto_start ? 1 : 0;
+    }
   }
   if (Object.keys(patch).length === 0) throw new HttpError(400, "Nothing to update");
   await upsert(env, userId, patch);

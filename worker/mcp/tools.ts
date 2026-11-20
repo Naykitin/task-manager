@@ -5,6 +5,8 @@ import { HttpError, newId, requireString } from "../util.ts";
 import { autoStopExpired } from "../lib/autostop.ts";
 import * as boards from "../routes/boards.ts";
 import * as checklist from "../routes/checklist.ts";
+import * as clients from "../routes/clients.ts";
+import * as pomodoro from "../routes/pomodoro.ts";
 import * as tasks from "../routes/tasks.ts";
 import * as timer from "../routes/timer.ts";
 import * as timesheet from "../routes/timesheet.ts";
@@ -136,20 +138,47 @@ export const TOOLS: Tool[] = [
   {
     name: "list_boards",
     description:
-      "List all boards (desks) with their id, name and task counts. Start here to discover board ids.",
+      "List all boards (desks) with their id, name, client and task counts. Start here to discover board ids. Pass `client` (id or name, or 'none') to list only one client's boards.",
+    scope: "read",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        client: str("Optional client id or name; 'none' = boards without a client"),
+      },
+    },
+    async handler(a, { env, userId }) {
+      const ref = optString(a.client);
+      const clientId = ref ? await clients.resolveClientRef(env, userId, ref) : undefined;
+      const filter =
+        ref === undefined
+          ? ""
+          : clientId === null
+            ? "AND b.client_id IS NULL"
+            : "AND b.client_id = ?";
+      const binds: unknown[] = [userId];
+      if (clientId) binds.push(clientId);
+      const { results } = await env.DB.prepare(
+        `SELECT b.id, b.name, b.client_id, cl.name AS client_name, b.created_at,
+                (SELECT COUNT(*) FROM tasks t JOIN columns c ON c.id = t.column_id
+                  WHERE c.board_id = b.id) AS task_count
+           FROM boards b LEFT JOIN clients cl ON cl.id = b.client_id
+          WHERE b.user_id = ? ${filter} ORDER BY b.created_at ASC`,
+      )
+        .bind(...binds)
+        .all();
+      return { boards: results };
+    },
+  },
+  {
+    name: "list_clients",
+    description:
+      "List clients (customers / personal projects) with id, name, hourly rate (minor units, e.g. cents), currency and board count. Boards are grouped under clients; time and money are reported per client.",
     scope: "read",
     annotations: { readOnlyHint: true },
     inputSchema: { type: "object", properties: {} },
     async handler(_a, { env, userId }) {
-      const { results } = await env.DB.prepare(
-        `SELECT b.id, b.name, b.created_at,
-                (SELECT COUNT(*) FROM tasks t JOIN columns c ON c.id = t.column_id
-                  WHERE c.board_id = b.id) AS task_count
-           FROM boards b WHERE b.user_id = ? ORDER BY b.created_at ASC`,
-      )
-        .bind(userId)
-        .all();
-      return { boards: results };
+      return unwrap(await clients.listClients(userId, env));
     },
   },
   {
@@ -281,9 +310,20 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "get_pomodoro",
+    description:
+      "Current Pomodoro session (phase, status, remaining time, completed focus intervals) and the user's Pomodoro settings. session is null when none is active.",
+    scope: "read",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: {} },
+    async handler(_a, { env, userId }) {
+      return unwrap(await pomodoro.getPomodoro(userId, env));
+    },
+  },
+  {
     name: "get_timesheet",
     description:
-      "Time tracked per day, task and board over a date range. Defaults to today (UTC unless tz_offset_minutes given).",
+      "Time tracked per day, task, board and client over a date range, plus money earned per currency (amount_minor = cents). Defaults to today (UTC unless tz_offset_minutes given).",
     scope: "read",
     annotations: { readOnlyHint: true },
     inputSchema: {
@@ -295,6 +335,9 @@ export const TOOLS: Tool[] = [
           type: "integer",
           description: "Minutes east of UTC for day boundaries, e.g. 60 for CET",
         },
+        client: str(
+          "Optional client id or name to report on one client only; 'none' = boards without a client",
+        ),
       },
     },
     async handler(a, { env, userId }) {
@@ -306,6 +349,13 @@ export const TOOLS: Tool[] = [
       url.searchParams.set("start", start);
       url.searchParams.set("end", end);
       url.searchParams.set("tzOffset", String(tz));
+      const ref = optString(a.client);
+      if (ref) {
+        url.searchParams.set(
+          "client_id",
+          (await clients.resolveClientRef(env, userId, ref)) ?? "none",
+        );
+      }
       return unwrap(await timesheet.getTimesheet(url, userId, env));
     },
   },
@@ -313,18 +363,81 @@ export const TOOLS: Tool[] = [
   // ------------------------------- write -------------------------------
   {
     name: "create_board",
-    description: "Create a new board (desk) with default columns To Do / In Progress / Done.",
+    description:
+      "Create a new board (desk) with default columns To Do / In Progress / Done. Optionally put it under a client (id or name from list_clients) so its time is tracked for that client.",
     scope: "write",
     inputSchema: {
       type: "object",
-      properties: { name: str("Board name") },
+      properties: { name: str("Board name"), client: str("Optional client id or name") },
       required: ["name"],
     },
     async handler(a, { env, userId }) {
+      const ref = optString(a.client);
+      const clientId = ref ? await clients.resolveClientRef(env, userId, ref) : null;
       const created = await unwrap(
-        await boards.createBoard(syntheticReq("POST", { name: a.name }), userId, env),
+        await boards.createBoard(
+          syntheticReq("POST", { name: a.name, client_id: clientId }),
+          userId,
+          env,
+        ),
       );
       return unwrap(await boards.getBoard(created.board.id, userId, env));
+    },
+  },
+  {
+    name: "create_client",
+    description:
+      "Create a client (customer or personal project). rate_minor is the hourly rate in minor units (cents), currency a 3-letter code. Then assign boards to it with create_board / update_board.",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        name: str("Client name"),
+        rate_minor: { type: "integer", description: "Hourly rate in minor units, e.g. 5000 = 50.00" },
+        currency: str("3-letter currency code, e.g. USD, EUR, RUB (default USD)"),
+        is_personal: { type: "boolean", description: "True for your own project (not billed)" },
+        color: str("Optional #rrggbb color"),
+      },
+      required: ["name"],
+    },
+    async handler(a, { env, userId }) {
+      const body: Record<string, unknown> = { name: a.name };
+      for (const k of ["rate_minor", "currency", "is_personal", "color"]) {
+        if (a[k] !== undefined) body[k] = a[k];
+      }
+      return unwrap(await clients.createClient(syntheticReq("POST", body), userId, env));
+    },
+  },
+  {
+    name: "update_client",
+    description:
+      "Update a client (id or name): rename, change hourly rate/currency/color, or archive. Changing the rate affects only time tracked afterwards.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        client: str("Client id or name"),
+        name: str("New name"),
+        rate_minor: {
+          type: ["integer", "null"],
+          description: "Hourly rate in minor units; null = not billed",
+        },
+        currency: str("3-letter currency code"),
+        is_personal: { type: "boolean" },
+        color: str("#rrggbb"),
+        archived: { type: "boolean" },
+      },
+      required: ["client"],
+    },
+    async handler(a, { env, userId }) {
+      const id = await clients.resolveClientRef(env, userId, requireString(a.client, "client"));
+      if (!id) throw new HttpError(400, "client is required");
+      const body: Record<string, unknown> = {};
+      for (const k of ["name", "rate_minor", "currency", "is_personal", "color", "archived"]) {
+        if (a[k] !== undefined) body[k] = a[k];
+      }
+      return unwrap(await clients.updateClient(syntheticReq("PATCH", body), id, userId, env));
     },
   },
   {
@@ -549,19 +662,33 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "update_board",
-    title: "Rename board",
-    description: "Rename a board.",
+    title: "Update board",
+    description:
+      "Rename a board and/or move it to a client (`client` = id or name from list_clients; 'none' detaches it). Time tracked from now on is billed to that client.",
     scope: "write",
     annotations: { idempotentHint: true },
     inputSchema: {
       type: "object",
-      properties: { board_id: str("Board id"), name: str("New board name") },
-      required: ["board_id", "name"],
+      properties: {
+        board_id: str("Board id"),
+        name: str("New board name"),
+        client: str("Client id or name; 'none' to detach from any client"),
+        pomodoro_enabled: {
+          type: "boolean",
+          description: "Allow Pomodoro sessions on this board (switching off ends one running there)",
+        },
+      },
+      required: ["board_id"],
     },
     async handler(a, { env, userId }) {
+      const patch: Record<string, unknown> = {};
+      if (optString(a.name)) patch.name = a.name;
+      const ref = optString(a.client);
+      if (ref) patch.client_id = await clients.resolveClientRef(env, userId, ref);
+      if (typeof a.pomodoro_enabled === "boolean") patch.pomodoro_enabled = a.pomodoro_enabled;
       return unwrap(
         await boards.updateBoard(
-          syntheticReq("PATCH", { name: a.name }),
+          syntheticReq("PATCH", patch),
           requireString(a.board_id, "board_id"),
           userId,
           env,
@@ -818,6 +945,45 @@ export const TOOLS: Tool[] = [
         .bind(newId(), from, to, rel)
         .run();
       return { ok: true, from_task_id: from, to_task_id: to, relation_type: rel };
+    },
+  },
+  {
+    name: "start_pomodoro",
+    description:
+      "Start a Pomodoro session: a focus interval on the task (tracked as normal time), then breaks. Only works on boards where Pomodoro is enabled (update_board pomodoro_enabled). Replaces any running timer.",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: str("Task id") },
+      required: ["task_id"],
+    },
+    async handler(a, { env, userId }) {
+      return unwrap(
+        await pomodoro.pomodoroAction(
+          syntheticReq("POST", { task_id: requireString(a.task_id, "task_id") }),
+          "start",
+          userId,
+          env,
+        ),
+      );
+    },
+  },
+  {
+    name: "pomodoro_action",
+    description:
+      "Control the active Pomodoro session: next (start the queued phase), pause, resume, skip (end the current phase early) or stop (end the session).",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: { action: { type: "string", enum: ["next", "pause", "resume", "skip", "stop"] } },
+      required: ["action"],
+    },
+    async handler(a, { env, userId }) {
+      const action = requireString(a.action, "action");
+      if (!["next", "pause", "resume", "skip", "stop"].includes(action)) {
+        throw new HttpError(400, "action must be next, pause, resume, skip or stop");
+      }
+      return unwrap(await pomodoro.pomodoroAction(syntheticReq("POST", {}), action, userId, env));
     },
   },
   {
