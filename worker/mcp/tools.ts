@@ -23,6 +23,8 @@ export interface ToolContext {
 
 export interface Tool {
   name: string;
+  /** Human-readable name; derived from `name` when omitted. */
+  title?: string;
   description: string;
   scope: Scope;
   inputSchema: Record<string, unknown>;
@@ -96,6 +98,35 @@ async function resolveColumn(
   return first.id;
 }
 
+/** Moves a task by column name/id; shared by move_task and bulk_move_tasks. */
+async function moveTaskByRef(a: Args, ctx: ToolContext): Promise<unknown> {
+  const taskId = requireString(a.task_id, "task_id");
+  await assertTaskOwner(ctx.env, ctx.userId, taskId);
+  const board = await ctx.env.DB.prepare(
+    `SELECT c.board_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?`,
+  )
+    .bind(taskId)
+    .first<{ board_id: string }>();
+  const columnId = await resolveColumn(ctx, requireString(a.column, "column"), board?.board_id);
+  return unwrap(
+    await tasks.moveTask(
+      syntheticReq("PATCH", { column_id: columnId, position: a.position }),
+      taskId,
+      ctx.userId,
+      ctx.env,
+    ),
+  );
+}
+
+/** Column id -> its board id (ownership already checked by resolveColumn). */
+async function boardOfColumn(ctx: ToolContext, columnId: string): Promise<string> {
+  const row = await ctx.env.DB.prepare("SELECT board_id FROM columns WHERE id = ?")
+    .bind(columnId)
+    .first<{ board_id: string }>();
+  if (!row) throw new HttpError(404, "Column not found");
+  return row.board_id;
+}
+
 const str = (description: string) => ({ type: "string", description });
 
 export const TOOLS: Tool[] = [
@@ -122,18 +153,52 @@ export const TOOLS: Tool[] = [
   {
     name: "get_board",
     description:
-      "Get one board with its columns and every task (title, description, time spent, links, running timer).",
+      "Get one board with its columns and tasks. Use detail='summary' for big boards (no descriptions, link counts only) and 'column' to look at a single column.",
     scope: "read",
     annotations: { readOnlyHint: true },
     inputSchema: {
       type: "object",
-      properties: { board_id: str("Board id from list_boards") },
+      properties: {
+        board_id: str("Board id from list_boards"),
+        detail: {
+          type: "string",
+          enum: ["full", "summary"],
+          description: "full (default): descriptions, links, timers. summary: compact, cheaper for large boards.",
+        },
+        column: str("Optional column name or id: return only that column"),
+      },
       required: ["board_id"],
     },
     async handler(a, { env, userId }) {
-      return unwrap(
+      const data = await unwrap(
         await boards.getBoard(requireString(a.board_id, "board_id"), userId, env),
       );
+      const filter = optString(a.column)?.toLowerCase();
+      let columns = data.board.columns as any[];
+      if (filter) {
+        columns = columns.filter(
+          (c) => c.id === optString(a.column) || String(c.name).toLowerCase() === filter,
+        );
+        if (columns.length === 0) {
+          throw new HttpError(404, `Column "${a.column}" not found on that board`);
+        }
+      }
+      if (a.detail === "summary") {
+        columns = columns.map((c) => ({
+          id: c.id,
+          name: c.name,
+          position: c.position,
+          task_count: c.tasks.length,
+          tasks: c.tasks.map((t: any) => ({
+            id: t.id,
+            title: t.title,
+            total_seconds: t.total_seconds,
+            running: t.running_entry != null,
+            link_count: t.links.length,
+          })),
+        }));
+      }
+      return { board: { ...data.board, columns } };
     },
   },
   {
@@ -428,24 +493,233 @@ export const TOOLS: Tool[] = [
       required: ["task_id", "column"],
     },
     async handler(a, ctx) {
-      const taskId = requireString(a.task_id, "task_id");
-      await assertTaskOwner(ctx.env, ctx.userId, taskId);
-      const board = await ctx.env.DB.prepare(
-        `SELECT c.board_id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE t.id = ?`,
-      )
-        .bind(taskId)
-        .first<{ board_id: string }>();
+      return moveTaskByRef(a, ctx);
+    },
+  },
+  {
+    name: "bulk_move_tasks",
+    description:
+      "Move several tasks (max 50) in one call, e.g. everything finished to 'Done'. Each move succeeds or fails independently; the result lists both.",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        moves: {
+          type: "array",
+          maxItems: 50,
+          items: {
+            type: "object",
+            properties: {
+              task_id: str("Task id"),
+              column: str("Target column name or id"),
+              position: { type: "integer", description: "0-based index in the column" },
+            },
+            required: ["task_id", "column"],
+          },
+        },
+      },
+      required: ["moves"],
+    },
+    async handler(a, ctx) {
+      if (!Array.isArray(a.moves) || a.moves.length === 0) {
+        throw new HttpError(400, "moves must be a non-empty array");
+      }
+      if (a.moves.length > 50) throw new HttpError(400, "Too many moves (max 50)");
+      const results: unknown[] = [];
+      for (const m of a.moves as Args[]) {
+        try {
+          await moveTaskByRef(m, ctx);
+          results.push({ task_id: m.task_id, ok: true });
+        } catch (e) {
+          if (!(e instanceof HttpError)) throw e;
+          results.push({ task_id: m.task_id, ok: false, error: e.message });
+        }
+      }
+      const failed = results.filter((r: any) => !r.ok).length;
+      return { moved: results.length - failed, failed, results };
+    },
+  },
+  {
+    name: "update_board",
+    title: "Rename board",
+    description: "Rename a board.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: { board_id: str("Board id"), name: str("New board name") },
+      required: ["board_id", "name"],
+    },
+    async handler(a, { env, userId }) {
+      return unwrap(
+        await boards.updateBoard(
+          syntheticReq("PATCH", { name: a.name }),
+          requireString(a.board_id, "board_id"),
+          userId,
+          env,
+        ),
+      );
+    },
+  },
+  {
+    name: "update_column",
+    title: "Rename column",
+    description: "Rename a column. Reference it by id, or by name together with board_id.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        column: str("Current column name or id"),
+        board_id: str("Board id; needed when column is a name"),
+        name: str("New column name"),
+      },
+      required: ["column", "name"],
+    },
+    async handler(a, ctx) {
       const columnId = await resolveColumn(
         ctx,
         requireString(a.column, "column"),
-        board?.board_id,
+        optString(a.board_id),
       );
       return unwrap(
-        await tasks.moveTask(
-          syntheticReq("PATCH", { column_id: columnId, position: a.position }),
-          taskId,
+        await boards.updateColumn(
+          syntheticReq("PATCH", { name: a.name }),
+          columnId,
           ctx.userId,
           ctx.env,
+        ),
+      );
+    },
+  },
+  {
+    name: "move_column",
+    title: "Reorder column",
+    description:
+      "Move a column to a new 0-based position on its board (0 = leftmost). Reference it by id, or by name together with board_id.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        column: str("Column name or id"),
+        board_id: str("Board id; needed when column is a name"),
+        position: { type: "integer", description: "New 0-based index" },
+      },
+      required: ["column", "position"],
+    },
+    async handler(a, ctx) {
+      if (typeof a.position !== "number" || a.position < 0) {
+        throw new HttpError(400, "position must be a non-negative integer");
+      }
+      const columnId = await resolveColumn(
+        ctx,
+        requireString(a.column, "column"),
+        optString(a.board_id),
+      );
+      const boardId = await boardOfColumn(ctx, columnId);
+      const { results } = await ctx.env.DB.prepare(
+        "SELECT id FROM columns WHERE board_id = ? ORDER BY position ASC, name ASC",
+      )
+        .bind(boardId)
+        .all<{ id: string }>();
+      const ids = results.map((r) => r.id).filter((id) => id !== columnId);
+      ids.splice(Math.min(Math.floor(a.position), ids.length), 0, columnId);
+      return unwrap(
+        await boards.reorderColumns(
+          syntheticReq("PUT", { column_ids: ids }),
+          boardId,
+          ctx.userId,
+          ctx.env,
+        ),
+      );
+    },
+  },
+  {
+    name: "unlink_tasks",
+    description:
+      "Remove a relation between two tasks. 'blocks' is directional (from blocks to); 'related' and 'duplicate' match either order. Omit relation_type to remove every relation between the pair.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        from_task_id: str("Source task id"),
+        to_task_id: str("Target task id"),
+        relation_type: { type: "string", enum: ["blocks", "related", "duplicate"] },
+      },
+      required: ["from_task_id", "to_task_id"],
+    },
+    async handler(a, { env, userId }) {
+      const from = requireString(a.from_task_id, "from_task_id");
+      const to = requireString(a.to_task_id, "to_task_id");
+      await assertTaskOwner(env, userId, from);
+      await assertTaskOwner(env, userId, to);
+      const rel = optString(a.relation_type);
+      if (rel && rel !== "blocks" && rel !== "related" && rel !== "duplicate") {
+        throw new HttpError(400, "relation_type must be blocks, related or duplicate");
+      }
+      const res = await env.DB.prepare(
+        `DELETE FROM task_links
+          WHERE ((from_task_id = ?1 AND to_task_id = ?2)
+              OR (from_task_id = ?2 AND to_task_id = ?1 AND relation_type != 'blocks'))
+            AND (?3 IS NULL OR relation_type = ?3)`,
+      )
+        .bind(from, to, rel ?? null)
+        .run();
+      return { ok: true, removed: res.meta.changes ?? 0 };
+    },
+  },
+  {
+    name: "add_time_entry",
+    description:
+      "Log a completed time entry on a task after the fact (e.g. 'I worked on this yesterday 14:00-15:30'). Times are ISO 8601 UTC.",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: str("Task id"),
+        started_at: str("ISO 8601 start, e.g. 2026-11-19T14:00:00Z"),
+        ended_at: str("ISO 8601 end, must be after start"),
+      },
+      required: ["task_id", "started_at", "ended_at"],
+    },
+    async handler(a, { env, userId }) {
+      return unwrap(
+        await timer.createManualEntry(
+          syntheticReq("POST", { started_at: a.started_at, ended_at: a.ended_at }),
+          requireString(a.task_id, "task_id"),
+          userId,
+          env,
+        ),
+      );
+    },
+  },
+  {
+    name: "update_time_entry",
+    description:
+      "Correct the start and/or end of a time entry (get entry ids from get_task). Useful after forgetting to stop a timer.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        entry_id: str("Time entry id"),
+        started_at: str("New ISO 8601 start"),
+        ended_at: str("New ISO 8601 end"),
+      },
+      required: ["entry_id"],
+    },
+    async handler(a, { env, userId }) {
+      const body: Args = {};
+      if (a.started_at !== undefined) body.started_at = a.started_at;
+      if (a.ended_at !== undefined) body.ended_at = a.ended_at;
+      return unwrap(
+        await timer.updateTimeEntry(
+          syntheticReq("PATCH", body),
+          requireString(a.entry_id, "entry_id"),
+          userId,
+          env,
         ),
       );
     },
@@ -510,6 +784,22 @@ export const TOOLS: Tool[] = [
   },
 
   // ------------------------------- delete ------------------------------
+  {
+    name: "delete_time_entry",
+    description: "Permanently delete one time entry. Irreversible.",
+    scope: "delete",
+    annotations: { destructiveHint: true },
+    inputSchema: {
+      type: "object",
+      properties: { entry_id: str("Time entry id") },
+      required: ["entry_id"],
+    },
+    async handler(a, { env, userId }) {
+      return unwrap(
+        await timer.deleteTimeEntry(requireString(a.entry_id, "entry_id"), userId, env),
+      );
+    },
+  },
   {
     name: "delete_task",
     description: "Permanently delete a task and its time entries. Irreversible.",
