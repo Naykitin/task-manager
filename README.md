@@ -12,6 +12,10 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
+- **Task steps (checklist):** every task can have an ordered list of steps. Add, rename,
+  reorder (drag) and delete them in the task dialog; tick them off right on the card, which
+  shows a `done/total` badge and progress bar. Requires migration `0007_task_checklist.sql`
+  on existing databases (`wrangler d1 migrations apply task-manager-db --remote`).
 - **Backup & restore of tracked time:** Timesheet page -> "Backup all time entries (CSV)"
   downloads every entry (board, column, task, start/end). "Restore from CSV" shows a
   dry-run preview first, then imports; existing entries are skipped, so it is safe to
@@ -139,8 +143,9 @@ Tools: `list_boards`, `get_board` (`detail='summary'` for big boards), `search_t
 `get_task`, `get_active_timer`, `get_timesheet` (read); `create_board`,
 `update_board`, `create_column`, `update_column`, `move_column`, `create_task`,
 `bulk_create_tasks`, `update_task`, `move_task`, `bulk_move_tasks`, `link_tasks`,
-`unlink_tasks`, `start_timer`, `stop_timer`, `add_time_entry`, `update_time_entry`
-(write); `delete_task`, `delete_column`, `delete_board`, `delete_time_entry` (delete).
+`unlink_tasks`, `start_timer`, `stop_timer`, `add_time_entry`, `update_time_entry`,
+`add_checklist_items`, `update_checklist_item` (write); `delete_task`, `delete_column`,
+`delete_board`, `delete_time_entry`, `delete_checklist_item` (delete).
 Also resources (`taskmanager://boards`, `taskmanager://active-timer`, templates
 `taskmanager://board/{id}` and `taskmanager://task/{id}`) and prompts
 (`daily_standup`, `weekly_review`, `plan_my_day`, `break_down_goal`). Browser callers must be listed in the

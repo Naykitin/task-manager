@@ -187,12 +187,16 @@ export function BoardView() {
     });
 
   // ---- Task CRUD ----
-  async function submitTask(values: { title: string; description: string }) {
+  async function submitTask(values: { title: string; description: string; steps: string[] }) {
     if (!modal) return;
     if (modal.mode === "create") {
-      await api.createTask(modal.columnId, values.title, values.description);
+      const { task } = await api.createTask(modal.columnId, values.title, values.description);
+      if (values.steps.length > 0) await api.addChecklistItems(task.id, values.steps);
     } else {
-      await api.updateTask(modal.task.id, values);
+      await api.updateTask(modal.task.id, {
+        title: values.title,
+        description: values.description,
+      });
     }
     setModal(null);
     await reload();
@@ -209,6 +213,27 @@ export function BoardView() {
           await reload();
         });
       },
+    });
+  };
+
+  // Ticking a step on a card: optimistic, reload if the server rejects it.
+  const onToggleChecklist = (taskId: string, itemId: string, done: boolean) => {
+    setColumns(
+      columnsRef.current.map((c) => ({
+        ...c,
+        tasks: c.tasks.map((t) =>
+          t.id !== taskId
+            ? t
+            : {
+                ...t,
+                checklist: t.checklist.map((i) => (i.id === itemId ? { ...i, done } : i)),
+              },
+        ),
+      })),
+    );
+    api.updateChecklistItem(itemId, { done }).catch(async (e) => {
+      setError(e instanceof Error ? e.message : "Failed to update step");
+      await reload();
     });
   };
 
@@ -539,6 +564,7 @@ export function BoardView() {
                 onDelete={onDeleteTask}
                 onHistory={(task) => setHistoryTask(task)}
                 onNavigateToTask={onNavigateToTask}
+                onToggleChecklist={onToggleChecklist}
               />
             ))}
             <button className="add-column" onClick={onAddColumn}>
@@ -563,6 +589,7 @@ export function BoardView() {
           initial={modal.mode === "edit" ? modal.task : undefined}
           onCancel={() => setModal(null)}
           onSubmit={submitTask}
+          onChecklistChanged={reload}
         />
       )}
       {historyTask && (

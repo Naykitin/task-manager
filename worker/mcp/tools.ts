@@ -3,6 +3,7 @@ import type { Scope } from "../apikeys.ts";
 import { assertColumnOwner, assertTaskOwner } from "../db.ts";
 import { HttpError, newId, requireString } from "../util.ts";
 import * as boards from "../routes/boards.ts";
+import * as checklist from "../routes/checklist.ts";
 import * as tasks from "../routes/tasks.ts";
 import * as timer from "../routes/timer.ts";
 import * as timesheet from "../routes/timesheet.ts";
@@ -195,6 +196,10 @@ export const TOOLS: Tool[] = [
             total_seconds: t.total_seconds,
             running: t.running_entry != null,
             link_count: t.links.length,
+            checklist: {
+              done: t.checklist.filter((i: any) => i.done).length,
+              total: t.checklist.length,
+            },
           })),
         }));
       }
@@ -444,6 +449,7 @@ export const TOOLS: Tool[] = [
           total_seconds: 0,
           running_entry: null,
           links: [],
+          checklist: [],
         });
       }
 
@@ -725,6 +731,62 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "add_checklist_items",
+    description:
+      "Add steps (a checklist) to a task, appended in order (max 50 per call, 100 per task). Great for breaking a task into stages.",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: {
+        task_id: str("Task id"),
+        items: { type: "array", maxItems: 50, items: { type: "string" }, description: "Step texts" },
+      },
+      required: ["task_id", "items"],
+    },
+    async handler(a, { env, userId }) {
+      if (!Array.isArray(a.items) || a.items.length > 50) {
+        throw new HttpError(400, "items must be an array of 1-50 strings");
+      }
+      const items = await checklist.addItems(
+        env,
+        userId,
+        requireString(a.task_id, "task_id"),
+        a.items,
+      );
+      return { items };
+    },
+  },
+  {
+    name: "update_checklist_item",
+    title: "Update checklist step",
+    description:
+      "Tick or untick a step (done) and/or change its text. Get step ids from get_task.",
+    scope: "write",
+    annotations: { idempotentHint: true },
+    inputSchema: {
+      type: "object",
+      properties: {
+        item_id: str("Checklist item id"),
+        done: { type: "boolean", description: "true = completed" },
+        text: str("New step text"),
+      },
+      required: ["item_id"],
+    },
+    async handler(a, { env, userId }) {
+      const body: Args = {};
+      if (a.done !== undefined) body.done = a.done;
+      if (a.text !== undefined) body.text = a.text;
+      return unwrap(
+        await checklist.updateItem(
+          syntheticReq("PATCH", body),
+          requireString(a.item_id, "item_id"),
+          userId,
+          env,
+        ),
+      );
+    },
+  },
+  {
     name: "link_tasks",
     description:
       "Create a relation between two tasks: 'blocks' (from blocks to), 'related', or 'duplicate'.",
@@ -797,6 +859,22 @@ export const TOOLS: Tool[] = [
     async handler(a, { env, userId }) {
       return unwrap(
         await timer.deleteTimeEntry(requireString(a.entry_id, "entry_id"), userId, env),
+      );
+    },
+  },
+  {
+    name: "delete_checklist_item",
+    description: "Permanently delete one checklist step. Irreversible.",
+    scope: "delete",
+    annotations: { destructiveHint: true },
+    inputSchema: {
+      type: "object",
+      properties: { item_id: str("Checklist item id") },
+      required: ["item_id"],
+    },
+    async handler(a, { env, userId }) {
+      return unwrap(
+        await checklist.deleteItem(requireString(a.item_id, "item_id"), userId, env),
       );
     },
   },

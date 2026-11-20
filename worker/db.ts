@@ -60,3 +60,20 @@ export async function assertTimeEntryOwner(
     .first();
   if (!row) throw new HttpError(404, "Time entry not found");
 }
+
+export async function assertChecklistItemOwner(
+  env: Env,
+  userId: string,
+  itemId: string,
+): Promise<void> {
+  const row = await env.DB.prepare(
+    `SELECT 1 FROM task_checklist_items i
+       JOIN tasks t ON t.id = i.task_id
+       JOIN columns c ON c.id = t.column_id
+       JOIN boards b ON b.id = c.board_id
+      WHERE i.id = ? AND b.user_id = ?`,
+  )
+    .bind(itemId, userId)
+    .first();
+  if (!row) throw new HttpError(404, "Checklist item not found");
+}

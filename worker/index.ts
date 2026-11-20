@@ -8,6 +8,7 @@ import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
 import * as voice from "./routes/voice.ts";
 import * as backup from "./routes/backup.ts";
+import * as checklist from "./routes/checklist.ts";
 import * as apikeys from "./apikeys.ts";
 import * as integrations from "./routes/integrations.ts";
 import { allow, clientIp, tooManyRequests } from "./ratelimit.ts";
@@ -144,6 +145,18 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (a === "tasks" && b && c === "time-entries" && method === "POST") {
     return timer.createManualEntry(req, b, userId, env);
+  }
+
+  // ---- Checklist ----
+  if (a === "tasks" && b && c === "checklist" && !d) {
+    if (method === "POST") return checklist.createItems(req, b, userId, env);
+  }
+  if (a === "tasks" && b && c === "checklist" && d === "order" && method === "PUT") {
+    return checklist.reorderItems(req, b, userId, env);
+  }
+  if (a === "checklist" && b && !c) {
+    if (method === "PATCH") return checklist.updateItem(req, b, userId, env);
+    if (method === "DELETE") return checklist.deleteItem(b, userId, env);
   }
 
   // ---- Voice notes ----
