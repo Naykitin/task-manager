@@ -376,11 +376,44 @@ input[type="datetime-local"]:focus {
   justify-content: space-between;
   padding: 12px 14px 8px;
 }
-.ts-backup {
+.ts-actions {
+  margin-left: auto;
   display: flex;
   gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 12px;
+  align-items: center;
+}
+.menu-wrap {
+  position: relative;
+}
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  min-width: 260px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+}
+.menu a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+}
+.menu a:hover {
+  background: var(--bg-elev);
+}
+.menu a span {
+  color: var(--text-faint);
+  font-size: 12px;
 }
 .ts-import-preview {
   background: var(--panel);
@@ -764,8 +797,7 @@ input[type="datetime-local"]:focus {
 .ts-dates input[type="date"] {
   width: auto;
 }
-.ts-toolbar a.btn {
-  margin-left: auto;
+.ts-toolbar .btn {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
