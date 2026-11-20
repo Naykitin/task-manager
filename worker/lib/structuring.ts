@@ -1,4 +1,3 @@
-import type { Env } from "../env.ts";
 import type { ProjectSnapshot, StructuringResult } from "../../shared/types.ts";
 import { HttpError } from "../util.ts";
 
@@ -168,7 +167,7 @@ async function callClaude(
 export async function structureTranscript(
   transcript: string,
   snapshot: ProjectSnapshot,
-  env: Env,
+  apiKey: string,
   boardName: string,
 ): Promise<StructuringResult> {
   const snapshotText = formatSnapshotForPrompt(snapshot);
@@ -177,7 +176,7 @@ export async function structureTranscript(
 
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt++) {
-    const text = await callClaude(systemPrompt, userMessage, env.ANTHROPIC_API_KEY);
+    const text = await callClaude(systemPrompt, userMessage, apiKey);
     try {
       const parsed = extractJson(text);
       if (isValidResult(parsed)) return parsed;

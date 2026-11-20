@@ -4,9 +4,9 @@ import { useAuth } from "./auth.tsx";
 import { AuthPage } from "./components/AuthPage.tsx";
 import { BoardView } from "./components/BoardView.tsx";
 import { Timesheet } from "./components/Timesheet.tsx";
-import { Integrations } from "./components/Integrations.tsx";
+import { Settings } from "./components/Settings.tsx";
 
-type View = "board" | "timesheet" | "integrations";
+type View = "board" | "timesheet" | "settings";
 
 export function App() {
   const { user, loading, logout } = useAuth();
@@ -46,14 +46,16 @@ export function App() {
           >
             Timesheet
           </button>
-          <button
-            className={view === "integrations" ? "tab active" : "tab"}
-            onClick={() => setView("integrations")}
-          >
-            Integrations
-          </button>
         </nav>
         <div className="topbar-right">
+          <button
+            className={view === "settings" ? "icon-btn gear active" : "icon-btn gear"}
+            title="Settings"
+            aria-label="Settings"
+            onClick={() => setView("settings")}
+          >
+            {"\u2699"}
+          </button>
           <span className="user-email">{user.email}</span>
           <button className="btn ghost" onClick={() => logout()}>
             Log out
@@ -64,7 +66,7 @@ export function App() {
       <main className="main">
         {view === "board" && <BoardView />}
         {view === "timesheet" && <Timesheet />}
-        {view === "integrations" && <Integrations />}
+        {view === "settings" && <Settings />}
       </main>
     </div>
   );

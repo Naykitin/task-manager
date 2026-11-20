@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
   email         TEXT NOT NULL UNIQUE,
   password_hash TEXT NOT NULL,
-  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+  -- Sessions issued before this instant are rejected (migrations/0008_settings.sql).
+  sessions_valid_after TEXT
 );
 
 CREATE TABLE IF NOT EXISTS boards (
@@ -204,3 +206,13 @@ CREATE TABLE IF NOT EXISTS task_checklist_items (
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_id, position);
+
+-- Per-user settings (see migrations/0008_settings.sql).
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id             TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  voice_enabled       INTEGER NOT NULL DEFAULT 0 CHECK (voice_enabled IN (0, 1)),
+  auto_stop_hours     INTEGER NOT NULL DEFAULT 0 CHECK (auto_stop_hours BETWEEN 0 AND 72),
+  anthropic_key_enc   TEXT,
+  anthropic_key_last4 TEXT,
+  updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);

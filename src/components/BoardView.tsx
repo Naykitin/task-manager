@@ -69,7 +69,7 @@ export function BoardView() {
   >(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  // Voice Inbox is feature-flagged server-side (VOICE_INBOX_ENABLED); hidden unless available.
+  // Voice Inbox is opt-in per user (Settings > AI & Voice); hidden unless available.
   const [voiceAvailable, setVoiceAvailable] = useState(false);
   useEffect(() => {
     api

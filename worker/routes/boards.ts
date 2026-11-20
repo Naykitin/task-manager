@@ -11,6 +11,7 @@ import type {
   TimeEntry,
 } from "../../shared/types.ts";
 import { assertBoardOwner, assertColumnOwner } from "../db.ts";
+import { autoStopExpired } from "../lib/autostop.ts";
 import { HttpError, json, newId, readJson, requireString } from "../util.ts";
 
 export async function listBoards(userId: string, env: Env): Promise<Response> {
@@ -114,6 +115,7 @@ export async function getBoard(
   userId: string,
   env: Env,
 ): Promise<Response> {
+  await autoStopExpired(env, userId);
   const board = await env.DB.prepare(
     "SELECT id, user_id, name, created_at FROM boards WHERE id = ? AND user_id = ?",
   )
