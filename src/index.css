@@ -1408,3 +1408,26 @@ input[type="datetime-local"]:focus {
 .swatch.active { border-color: var(--text); }
 .client-colors { display: inline-flex; gap: 6px; }
 .client-form-actions { display: flex; gap: 8px; }
+
+/* ---- Pomodoro ---- */
+.pomo-bar { position: sticky; top: 53px; z-index: 9; display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 20px 10px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.pomo-bar.focus { box-shadow: inset 3px 0 0 #ef4444; }
+.pomo-bar.break { box-shadow: inset 3px 0 0 #10b981; }
+.pomo-main { display: flex; align-items: center; gap: 14px; min-width: 0; flex: 1; }
+.pomo-phase { font-weight: 600; white-space: nowrap; }
+.pomo-time { font-family: var(--mono); font-size: 22px; font-weight: 700; }
+.pomo-task { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); min-width: 0; }
+.pomo-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.pomo-error { color: #ef4444; font-size: 13px; }
+.pomo-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: transparent; }
+.pomo-progress span { display: block; height: 100%; background: #ef4444; transition: width 0.5s linear; }
+.pomo-bar.break .pomo-progress span { background: #10b981; }
+.pomo-count { margin-left: auto; font-size: 12px; color: var(--text-dim); }
+.pomo-board-list { display: flex; flex-direction: column; gap: 6px; }
+.pomo-group { border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 12px; }
+.pomo-group > label.group-head { font-weight: 600; }
+.pomo-group ul { list-style: none; margin: 6px 0 0 24px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.pomo-group label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.pomo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; width: 100%; }
+.pomo-grid label { display: flex; flex-direction: column; gap: 4px; color: var(--text-dim); font-size: 13px; }
+.pomo-grid input { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; outline: none; }

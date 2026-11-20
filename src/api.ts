@@ -5,6 +5,8 @@ import type {
   ChecklistItem,
   Client,
   Column,
+  PomodoroSession,
+  PomodoroSettings,
   StructuringResult,
   Task,
   TimeEntry,
@@ -30,6 +32,7 @@ import { clientId } from "./live.ts";
 export interface AppSettings {
   voice_enabled: boolean;
   auto_stop_hours: number;
+  pomodoro: PomodoroSettings;
   anthropic: { configured: boolean; source: "user" | "server" | null; last4: string | null };
   encryption_available: boolean;
 }
@@ -44,6 +47,11 @@ export interface ClientInput {
 
 /** "" = all clients, "none" = boards without a client, else a client id. */
 const clientQuery = (id: string) => (id ? `&client_id=${encodeURIComponent(id)}` : "");
+
+export interface PomodoroState {
+  session: PomodoroSession | null;
+  settings: PomodoroSettings;
+}
 
 export class ApiError extends Error {
   constructor(
@@ -106,7 +114,7 @@ export const api = {
       body: JSON.stringify({ name, client_id }),
     }),
   getBoard: (id: string) => request<{ board: BoardDetail }>(`/api/boards/${id}`),
-  updateBoard: (id: string, patch: { name?: string; client_id?: string | null }) =>
+  updateBoard: (id: string, patch: { name?: string; client_id?: string | null; pomodoro_enabled?: boolean }) =>
     request<{ board: Board }>(`/api/boards/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
@@ -145,6 +153,16 @@ export const api = {
     }),
   deleteClient: (id: string) =>
     request<{ ok: true }>(`/api/clients/${id}`, { method: "DELETE" }),
+
+  // ---- Pomodoro ----
+  pomodoro: () => request<PomodoroState>("/api/pomodoro"),
+  pomodoroStart: (task_id: string) =>
+    request<PomodoroState>("/api/pomodoro/start", {
+      method: "POST",
+      body: JSON.stringify({ task_id }),
+    }),
+  pomodoroAction: (action: "next" | "pause" | "resume" | "skip" | "stop") =>
+    request<PomodoroState>(`/api/pomodoro/${action}`, { method: "POST", body: "{}" }),
 
   // ---- Tasks ----
   createTask: (column_id: string, title: string, description?: string) =>
@@ -237,7 +255,11 @@ export const api = {
 
   // ---- Settings & account ----
   getSettings: () => request<AppSettings>("/api/settings"),
-  updateSettings: (patch: { voice_enabled?: boolean; auto_stop_hours?: number }) =>
+  updateSettings: (patch: {
+    voice_enabled?: boolean;
+    auto_stop_hours?: number;
+    pomodoro?: Partial<PomodoroSettings>;
+  }) =>
     request<AppSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(patch) }),
   saveAnthropicKey: (key: string) =>
     request<AppSettings>("/api/settings/anthropic-key", {
