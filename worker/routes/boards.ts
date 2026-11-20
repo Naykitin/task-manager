@@ -278,6 +278,62 @@ export async function updateColumn(
   return json({ column });
 }
 
+/**
+ * PUT /api/boards/:id/columns/order - { column_ids: string[] } in the desired
+ * left-to-right order. Every id must belong to the board; columns not listed
+ * (e.g. created in another tab meanwhile) keep their relative order after the
+ * listed ones. Positions are rewritten atomically as 0..n-1.
+ */
+export async function reorderColumns(
+  req: Request,
+  boardId: string,
+  userId: string,
+  env: Env,
+): Promise<Response> {
+  await assertBoardOwner(env, userId, boardId);
+  const body = await readJson<{ column_ids?: unknown }>(req);
+  if (
+    !Array.isArray(body.column_ids) ||
+    body.column_ids.length === 0 ||
+    body.column_ids.length > 200 ||
+    body.column_ids.some((x) => typeof x !== "string")
+  ) {
+    throw new HttpError(400, "column_ids must be a non-empty array of ids");
+  }
+  const requested = [...new Set(body.column_ids as string[])];
+
+  const existing = await env.DB.prepare(
+    "SELECT id FROM columns WHERE board_id = ? ORDER BY position ASC, name ASC",
+  )
+    .bind(boardId)
+    .all<{ id: string }>();
+  const known = new Set(existing.results.map((r) => r.id));
+  if (requested.some((id) => !known.has(id))) {
+    throw new HttpError(400, "column_ids contains a column that is not on this board");
+  }
+  const listed = new Set(requested);
+  const order = [
+    ...requested,
+    ...existing.results.map((r) => r.id).filter((id) => !listed.has(id)),
+  ];
+
+  await env.DB.batch(
+    order.map((id, i) =>
+      env.DB.prepare("UPDATE columns SET position = ? WHERE id = ? AND board_id = ?").bind(
+        i,
+        id,
+        boardId,
+      ),
+    ),
+  );
+  const columns = await env.DB.prepare(
+    "SELECT id, board_id, name, position FROM columns WHERE board_id = ? ORDER BY position ASC",
+  )
+    .bind(boardId)
+    .all<Column>();
+  return json({ columns: columns.results });
+}
+
 export async function deleteColumn(
   columnId: string,
   userId: string,
