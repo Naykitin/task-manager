@@ -80,6 +80,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     if (method === "GET") return boards.listBoards(userId, env);
     if (method === "POST") return boards.createBoard(req, userId, env);
   }
+  if (a === "boards" && b && c === "columns" && d === "order" && method === "PUT") {
+    return boards.reorderColumns(req, b, userId, env);
+  }
   if (a === "boards" && b && !c) {
     if (method === "GET") return boards.getBoard(b, userId, env);
     if (method === "PATCH") return boards.updateBoard(req, b, userId, env);

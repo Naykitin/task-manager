@@ -86,6 +86,11 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  reorderColumns: (boardId: string, column_ids: string[]) =>
+    request<{ columns: Column[] }>(`/api/boards/${boardId}/columns/order`, {
+      method: "PUT",
+      body: JSON.stringify({ column_ids }),
+    }),
   deleteColumn: (id: string) =>
     request<{ ok: true }>(`/api/columns/${id}`, { method: "DELETE" }),
 
