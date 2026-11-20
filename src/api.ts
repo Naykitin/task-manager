@@ -11,6 +11,18 @@ import type {
   VoiceNote,
 } from "../shared/types.ts";
 
+export interface ImportResult {
+  dry_run: boolean;
+  format: "full" | "timesheet";
+  rows: number;
+  imported: number;
+  skipped_duplicates: number;
+  created_boards: number;
+  created_tasks: number;
+  invalid: number;
+  problems: { line: number; reason: string }[];
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -165,6 +177,18 @@ export const api = {
     }),
   discardVoiceNote: (id: string) =>
     request<{ ok: true }>(`/api/voice-notes/${id}/discard`, { method: "POST" }),
+
+  // ---- Time entry backup ----
+  timeEntriesExportUrl: "/api/time-entries/export",
+  importTimeEntries: (csv: string, dry_run: boolean) =>
+    request<ImportResult>("/api/time-entries/import", {
+      method: "POST",
+      body: JSON.stringify({
+        csv,
+        dry_run,
+        tz_offset_minutes: -new Date().getTimezoneOffset(),
+      }),
+    }),
 
   // ---- Timesheet ----
   timesheet: (start: string, end: string) => {

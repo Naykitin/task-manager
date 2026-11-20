@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { TimesheetResponse } from "../../shared/types.ts";
-import { api } from "../api.ts";
+import { api, type ImportResult } from "../api.ts";
 import {
   formatDate,
   formatDuration,
@@ -16,6 +16,44 @@ export function Timesheet() {
   const [data, setData] = useState<TimesheetResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [csvText, setCsvText] = useState<string | null>(null);
+  const [preview, setPreview] = useState<ImportResult | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+
+  async function onPickFile(file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    setImportMsg(null);
+    setPreview(null);
+    try {
+      const text = await file.text();
+      setCsvText(text);
+      setPreview(await api.importTimeEntries(text, true));
+    } catch (err) {
+      setCsvText(null);
+      setError(err instanceof Error ? err.message : "Could not read CSV");
+    }
+  }
+
+  async function confirmImport() {
+    if (!csvText) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const res = await api.importTimeEntries(csvText, false);
+      setImportMsg(
+        `Imported ${res.imported} entries (${res.skipped_duplicates} duplicates skipped, ${res.created_boards} boards and ${res.created_tasks} tasks created).`,
+      );
+      setCsvText(null);
+      setPreview(null);
+      await load(start, end);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const load = useCallback(async (s: string, e: string) => {
     setLoading(true);
@@ -96,6 +134,68 @@ export function Timesheet() {
           ⬇ Export CSV
         </a>
       </div>
+
+      <div className="ts-backup">
+        <a className="btn ghost sm" href={api.timeEntriesExportUrl} download>
+          ⬇ Backup all time entries (CSV)
+        </a>
+        <label className="btn ghost sm">
+          ⬆ Restore from CSV…
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            hidden
+            onChange={(e) => {
+              void onPickFile(e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+
+      {preview && (
+        <div className="ts-import-preview">
+          <strong>
+            {preview.format === "full"
+              ? "Full backup detected"
+              : "Timesheet export detected (approximate: one entry per day/task, placed at 09:00)"}
+          </strong>
+          <div>
+            {preview.rows} rows: <b>{preview.imported}</b> new entries,{" "}
+            {preview.skipped_duplicates} already exist, {preview.invalid} invalid. Will create{" "}
+            {preview.created_boards} boards and {preview.created_tasks} tasks.
+          </div>
+          {preview.problems.length > 0 && (
+            <ul>
+              {preview.problems.map((p) => (
+                <li key={p.line}>
+                  line {p.line}: {p.reason}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="ts-import-actions">
+            <button
+              className="btn primary sm"
+              disabled={importing || preview.imported + preview.created_tasks === 0}
+              onClick={confirmImport}
+            >
+              {importing ? "Importing…" : "Import"}
+            </button>
+            <button
+              className="btn ghost sm"
+              disabled={importing}
+              onClick={() => {
+                setPreview(null);
+                setCsvText(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {importMsg && <div className="ts-import-preview">{importMsg}</div>}
 
       {error && <div className="banner-error">{error}</div>}
 

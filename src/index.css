@@ -376,6 +376,32 @@ input[type="datetime-local"]:focus {
   justify-content: space-between;
   padding: 12px 14px 8px;
 }
+.ts-backup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+}
+.ts-import-preview {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+.ts-import-preview ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-dim);
+}
+.ts-import-actions {
+  display: flex;
+  gap: 8px;
+}
 .column-grip {
   background: none;
   border: 0;
