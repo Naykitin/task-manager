@@ -5,17 +5,23 @@ import {
   PointerSensor,
   KeyboardSensor,
   closestCorners,
+  type CollisionDetection,
   useSensor,
   useSensors,
   type DragEndEvent,
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import type { Board, ColumnWithTasks, Task } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { formatDuration } from "../format.ts";
-import { ColumnView } from "./ColumnView.tsx";
+import { COLUMN_PREFIX, ColumnView, columnSortId } from "./ColumnView.tsx";
 import { ConfirmModal } from "./ConfirmModal.tsx";
 import { TaskModal } from "./TaskModal.tsx";
 import { TimeLogModal } from "./TimeLogModal.tsx";
@@ -30,6 +36,19 @@ function findContainerId(
   if (columns.some((c) => c.id === id)) return id;
   return columns.find((c) => c.tasks.some((t) => t.id === id))?.id;
 }
+
+const isColumnId = (id: string) => id.startsWith(COLUMN_PREFIX);
+
+// Columns and tasks share one DndContext; only compare like with like.
+const collisionDetection: CollisionDetection = (args) => {
+  const dragColumn = isColumnId(String(args.active.id));
+  return closestCorners({
+    ...args,
+    droppableContainers: args.droppableContainers.filter(
+      (c) => isColumnId(String(c.id)) === dragColumn,
+    ),
+  });
+};
 
 export function BoardView() {
   const [boards, setBoards] = useState<Board[]>([]);
@@ -48,6 +67,14 @@ export function BoardView() {
   >(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // Voice Inbox is feature-flagged server-side (VOICE_INBOX_ENABLED); hidden unless available.
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
+  useEffect(() => {
+    api
+      .getVoiceAvailability()
+      .then(({ available }) => setVoiceAvailable(available))
+      .catch(() => setVoiceAvailable(false));
+  }, []);
   const [confirmModal, setConfirmModal] = useState<
     { title: string; message: string; onConfirm: () => void } | null
   >(null);
@@ -267,6 +294,7 @@ export function BoardView() {
   // ---- Drag and drop ----
   function onDragStart(event: DragStartEvent) {
     const id = String(event.active.id);
+    if (isColumnId(id)) return;
     for (const c of columnsRef.current) {
       const t = c.tasks.find((x) => x.id === id);
       if (t) {
@@ -278,7 +306,7 @@ export function BoardView() {
 
   function onDragOver(event: DragOverEvent) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || isColumnId(String(active.id))) return;
     const activeId = String(active.id);
     const overId = String(over.id);
     const cols = columnsRef.current;
@@ -316,10 +344,32 @@ export function BoardView() {
     setColumns(next);
   }
 
+  function onColumnDragEnd(activeId: string, overId: string) {
+    const cols = columnsRef.current;
+    const oldIndex = cols.findIndex((c) => columnSortId(c.id) === activeId);
+    const newIndex = cols.findIndex((c) => columnSortId(c.id) === overId);
+    if (oldIndex < 0 || newIndex < 0 || oldIndex === newIndex || !currentBoardId) return;
+    const next = arrayMove(cols, oldIndex, newIndex);
+    setColumns(next);
+    const boardId = currentBoardId;
+    void (async () => {
+      try {
+        await api.reorderColumns(boardId, next.map((c) => c.id));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to reorder columns");
+        await reload();
+      }
+    })();
+  }
+
   function onDragEnd(event: DragEndEvent) {
     setActiveTask(null);
     const { active, over } = event;
     if (!over) return;
+    if (isColumnId(String(active.id))) {
+      onColumnDragEnd(String(active.id), String(over.id));
+      return;
+    }
     const activeId = String(active.id);
     const overId = String(over.id);
     const cols = columnsRef.current;
@@ -414,7 +464,7 @@ export function BoardView() {
 
       {error && <div className="banner-error">{error}</div>}
 
-      {currentBoard && (
+      {currentBoard && voiceAvailable && (
         <div className="voice-toggle-wrap">
           <button className="btn ghost sm" onClick={() => setVoiceOpen((v) => !v)}>
             {voiceOpen ? "▾" : "▸"} Add tasks via voice/text
@@ -436,11 +486,15 @@ export function BoardView() {
       ) : (
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
         >
+          <SortableContext
+            items={columns.map((c) => columnSortId(c.id))}
+            strategy={horizontalListSortingStrategy}
+          >
           <div className="columns">
             {columns.map((column) => (
               <ColumnView
@@ -463,6 +517,7 @@ export function BoardView() {
               + Add column
             </button>
           </div>
+          </SortableContext>
 
           <DragOverlay>
             {activeTask ? (

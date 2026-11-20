@@ -7,6 +7,7 @@ import * as tasks from "./routes/tasks.ts";
 import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
 import * as voice from "./routes/voice.ts";
+import * as backup from "./routes/backup.ts";
 import * as apikeys from "./apikeys.ts";
 import * as integrations from "./routes/integrations.ts";
 import { allow, clientIp, tooManyRequests } from "./ratelimit.ts";
@@ -80,6 +81,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
     if (method === "GET") return boards.listBoards(userId, env);
     if (method === "POST") return boards.createBoard(req, userId, env);
   }
+  if (a === "boards" && b && c === "columns" && d === "order" && method === "PUT") {
+    return boards.reorderColumns(req, b, userId, env);
+  }
   if (a === "boards" && b && !c) {
     if (method === "GET") return boards.getBoard(b, userId, env);
     if (method === "PATCH") return boards.updateBoard(req, b, userId, env);
@@ -146,6 +150,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (a === "voice-notes" && b === "availability" && !c && method === "GET") {
     return voice.getVoiceAvailability(env);
   }
+  if (a === "voice-notes" && !voice.isVoiceInboxEnabled(env)) {
+    return json({ error: "Voice Inbox is disabled" }, { status: 404 });
+  }
   if (a === "voice-notes" && !b) {
     if (method === "GET") return voice.listVoiceNotes(url, userId, env);
     if (method === "POST") return voice.createVoiceNote(req, userId, env);
@@ -158,6 +165,14 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (a === "voice-notes" && b && c === "discard" && method === "POST") {
     return voice.discardVoiceNote(b, userId, env);
+  }
+
+  // ---- Time entry backup (CSV) ----
+  if (a === "time-entries" && b === "export" && !c && method === "GET") {
+    return backup.exportTimeEntriesCsv(userId, env);
+  }
+  if (a === "time-entries" && b === "import" && !c && method === "POST") {
+    return backup.importTimeEntriesCsv(req, userId, env);
   }
 
   // ---- Time entries (direct edit/delete by id) ----

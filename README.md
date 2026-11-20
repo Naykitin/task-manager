@@ -12,7 +12,12 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
-- **Voice Inbox (optional):** dictate (Web Speech API) or type a note →
+- **Backup & restore of tracked time:** Timesheet page -> "Backup all time entries (CSV)"
+  downloads every entry (board, column, task, start/end). "Restore from CSV" shows a
+  dry-run preview first, then imports; existing entries are skipped, so it is safe to
+  repeat. The per-day timesheet export is accepted too (approximate, 09:00 local).
+  For a full database backup use `wrangler d1 export` / D1 Time Travel.
+- **Voice Inbox (optional, hidden by default — set `VOICE_INBOX_ENABLED="true"` in `wrangler.jsonc` vars to enable):** dictate (Web Speech API) or type a note →
   Claude API extracts concrete tasks + relations to existing tasks → you
   review/edit every suggestion → apply writes tasks + links atomically.
   Entirely optional — the rest of the app works without it, see below.
@@ -130,12 +135,15 @@ If your client only supports local `stdio` subprocesses instead of HTTP:
 ```
 Or run `npm run mcp:bridge`.
 
-Tools: `list_boards`, `get_board`, `search_tasks`, `get_task`, `get_active_timer`,
-`get_timesheet` (read); `create_board`, `create_column`, `create_task`,
-`bulk_create_tasks`, `update_task`, `move_task`, `link_tasks`, `start_timer`,
-`stop_timer` (write); `delete_task`, `delete_column`, `delete_board` (delete).
-Also resources (`taskmanager://boards`, `taskmanager://active-timer`) and prompts
-(`daily_standup`, `break_down_goal`). Browser callers must be listed in the
+Tools: `list_boards`, `get_board` (`detail='summary'` for big boards), `search_tasks`,
+`get_task`, `get_active_timer`, `get_timesheet` (read); `create_board`,
+`update_board`, `create_column`, `update_column`, `move_column`, `create_task`,
+`bulk_create_tasks`, `update_task`, `move_task`, `bulk_move_tasks`, `link_tasks`,
+`unlink_tasks`, `start_timer`, `stop_timer`, `add_time_entry`, `update_time_entry`
+(write); `delete_task`, `delete_column`, `delete_board`, `delete_time_entry` (delete).
+Also resources (`taskmanager://boards`, `taskmanager://active-timer`, templates
+`taskmanager://board/{id}` and `taskmanager://task/{id}`) and prompts
+(`daily_standup`, `weekly_review`, `plan_my_day`, `break_down_goal`). Browser callers must be listed in the
 optional `MCP_ALLOWED_ORIGINS` var; non-browser clients send no Origin and are
 unaffected.
 

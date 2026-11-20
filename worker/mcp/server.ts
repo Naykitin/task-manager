@@ -4,6 +4,7 @@ import { HttpError, newId } from "../util.ts";
 import { mcpChallenge } from "../oauth.ts";
 import { allow, clientIp } from "../ratelimit.ts";
 import { TOOLS, type Tool } from "./tools.ts";
+import pkg from "../../package.json";
 
 // ---------------------------------------------------------------------------
 // Minimal stateless MCP server over Streamable HTTP (JSON responses only).
@@ -13,10 +14,11 @@ import { TOOLS, type Tool } from "./tools.ts";
 // ---------------------------------------------------------------------------
 
 const SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INFO = { name: "task-manager", version: "1.0.0" };
+const SERVER_INFO = { name: "task-manager", version: pkg.version };
 const INSTRUCTIONS =
   "Kanban task manager with time tracking. Call list_boards first to get board ids, then get_board for columns/tasks. " +
-  "Columns can be referenced by name (e.g. 'Done') when board_id is known. Destructive tools exist only if the API key has the delete scope.";
+  "Columns can be referenced by name (e.g. 'Done') when board_id is known. Prefer get_board with detail='summary' on large boards. " +
+  "Time entries can be logged after the fact (add_time_entry) and corrected (update_time_entry). Destructive tools exist only if the API key has the delete scope.";
 
 interface RpcMessage {
   jsonrpc?: string;
@@ -65,6 +67,11 @@ function plain(status: number, body: unknown, headers: Record<string, string> = 
   });
 }
 
+function humanize(name: string): string {
+  const s = name.replace(/_/g, " ");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // ---- Resources & prompts ---------------------------------------------------
 
 const RESOURCES = [
@@ -82,6 +89,21 @@ const RESOURCES = [
   },
 ];
 
+const RESOURCE_TEMPLATES = [
+  {
+    uriTemplate: "taskmanager://board/{board_id}",
+    name: "Board",
+    description: "One board with its columns and tasks",
+    mimeType: "application/json",
+  },
+  {
+    uriTemplate: "taskmanager://task/{task_id}",
+    name: "Task",
+    description: "One task with links and time entries",
+    mimeType: "application/json",
+  },
+];
+
 const RESOURCE_TOOL: Record<string, string> = {
   "taskmanager://boards": "list_boards",
   "taskmanager://active-timer": "get_active_timer",
@@ -92,6 +114,18 @@ const PROMPTS = [
     name: "daily_standup",
     description: "Morning briefing: what's in progress, queued, and tracked recently.",
     arguments: [],
+  },
+  {
+    name: "weekly_review",
+    description: "Review the past week: time per board/task, what moved to Done, what is stuck.",
+    arguments: [],
+  },
+  {
+    name: "plan_my_day",
+    description: "Suggest a realistic plan for today from open tasks and recent time tracking.",
+    arguments: [
+      { name: "hours", description: "Hours available today (default 6)", required: false },
+    ],
   },
   {
     name: "break_down_goal",
@@ -108,6 +142,19 @@ function promptText(name: string, args: Record<string, string>): string {
     return (
       "Prepare my daily standup. Use list_boards and get_board to review my boards, get_active_timer for current work, " +
       "and get_timesheet for yesterday and today. Summarise: (1) done recently, (2) in progress, (3) next up, (4) blockers (tasks with 'blocks' links). Keep it short."
+    );
+  }
+  if (name === "weekly_review") {
+    return (
+      "Prepare my weekly review. Use get_timesheet for the last 7 days and list_boards + get_board (detail='summary') for current state. " +
+      "Summarise: (1) time per board and top tasks, (2) what reached the last column, (3) tasks that look stuck (no time tracked, 'blocks' links), (4) one suggestion for next week. Keep it concise."
+    );
+  }
+  if (name === "plan_my_day") {
+    const hours = Number(args.hours) > 0 ? Number(args.hours) : 6;
+    return (
+      `Plan my day for about ${hours} hours. Use get_active_timer, list_boards and get_board (detail='summary') to find open tasks, ` +
+      "and get_timesheet for recent effort. Propose an ordered list of 3-6 tasks with rough time boxes, respecting 'blocks' links. Do not change anything until I confirm."
     );
   }
   if (name === "break_down_goal") {
@@ -191,11 +238,13 @@ async function dispatch(
       return {};
     case "tools/list":
       return {
-        tools: visibleTools(p).map(({ name, description, inputSchema, annotations }) => ({
+        tools: visibleTools(p).map(({ name, title, description, inputSchema, annotations }) => ({
           name,
+          title: title ?? humanize(name),
           description,
           inputSchema,
-          ...(annotations ? { annotations } : {}),
+          // Everything here stays inside the user's own task data.
+          annotations: { openWorldHint: false, ...annotations },
         })),
       };
     case "tools/call": {
@@ -206,18 +255,27 @@ async function dispatch(
     case "resources/list":
       return { resources: p.scopes.has("read") ? RESOURCES : [] };
     case "resources/read": {
-      const toolName = RESOURCE_TOOL[String(params.uri)];
+      const uri = String(params.uri);
+      let toolName = RESOURCE_TOOL[uri];
+      let toolArgs: Record<string, unknown> = {};
+      const m = /^taskmanager:\/\/(board|task)\/([^/?#]+)$/.exec(uri);
+      if (m) {
+        toolName = m[1] === "board" ? "get_board" : "get_task";
+        toolArgs = m[1] === "board" ? { board_id: m[2] } : { task_id: m[2] };
+      }
       const tool = TOOLS.find((t) => t.name === toolName);
       if (!tool || !p.scopes.has("read")) {
         throw new RpcError(-32002, `Resource not found: ${params.uri}`);
       }
-      const data = await tool.handler({}, { env, userId: p.userId });
+      const data = await tool.handler(toolArgs, { env, userId: p.userId });
       return {
         contents: [
           { uri: params.uri, mimeType: "application/json", text: JSON.stringify(data, null, 2) },
         ],
       };
     }
+    case "resources/templates/list":
+      return { resourceTemplates: p.scopes.has("read") ? RESOURCE_TEMPLATES : [] };
     case "prompts/list":
       return { prompts: PROMPTS };
     case "prompts/get":
