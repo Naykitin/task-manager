@@ -435,6 +435,104 @@ input[type="datetime-local"]:focus {
   display: flex;
   gap: 8px;
 }
+.steps > span {
+  display: block;
+  margin-bottom: 6px;
+}
+.steps input[type="checkbox"] {
+  width: auto;
+  flex: none;
+  padding: 0;
+  margin: 0;
+}
+.step-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 4px 8px;
+}
+.step-grip {
+  background: none;
+  border: 0;
+  color: var(--text-faint);
+  cursor: grab;
+  touch-action: none;
+  padding: 0 2px;
+}
+.step-text {
+  flex: 1;
+  cursor: text;
+  word-break: break-word;
+}
+.step-text.done,
+.checklist-list .done {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+.step-edit {
+  flex: 1;
+}
+.step-add {
+  display: flex;
+  gap: 8px;
+}
+.step-add input {
+  flex: 1;
+}
+.card-checklist {
+  margin: 6px 0;
+}
+.checklist-badge {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  padding: 2px 0;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 12px;
+  text-align: left;
+}
+.checklist-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+.checklist-bar > span {
+  display: block;
+  height: 100%;
+  background: #2fbf8f;
+}
+.checklist-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.checklist-list label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  cursor: pointer;
+}
 .field-hint {
   display: block;
   margin-top: 4px;

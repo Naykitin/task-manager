@@ -15,6 +15,7 @@ import {
   readJson,
   requireString,
 } from "../util.ts";
+import { listItems } from "./checklist.ts";
 
 /**
  * Builds (without executing) the INSERT statement for a new task row.
@@ -177,6 +178,7 @@ export async function deleteTask(
       taskId,
     ),
     env.DB.prepare("DELETE FROM time_entries WHERE task_id = ?").bind(taskId),
+    env.DB.prepare("DELETE FROM task_checklist_items WHERE task_id = ?").bind(taskId),
     env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(taskId),
   ]);
   return json({ ok: true });
@@ -366,7 +368,7 @@ export async function loadTask(env: Env, taskId: string): Promise<Task> {
       GROUP BY t.id`,
   )
     .bind(taskId)
-    .first<Omit<Task, "running_entry" | "links">>();
+    .first<Omit<Task, "running_entry" | "links" | "checklist">>();
   if (!row) throw new HttpError(404, "Task not found");
 
   const running = await env.DB.prepare(
@@ -378,5 +380,7 @@ export async function loadTask(env: Env, taskId: string): Promise<Task> {
 
   const links = await loadTaskLinks(env, taskId);
 
-  return { ...row, running_entry: running ?? null, links };
+  const checklist = await listItems(env, taskId);
+
+  return { ...row, running_entry: running ?? null, links, checklist };
 }

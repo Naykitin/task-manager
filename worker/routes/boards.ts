@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import type {
   Board,
   BoardDetail,
+  ChecklistItem,
   Column,
   ColumnWithTasks,
   RelationType,
@@ -90,6 +91,10 @@ export async function deleteBoard(
          SELECT t.id FROM tasks t
            JOIN columns c ON c.id = t.column_id
           WHERE c.board_id = ?)`,
+    ).bind(boardId),
+    env.DB.prepare(
+      `DELETE FROM task_checklist_items WHERE task_id IN (
+         SELECT t.id FROM tasks t JOIN columns c ON c.id = t.column_id WHERE c.board_id = ?)`,
     ).bind(boardId),
     env.DB.prepare(
       "DELETE FROM tasks WHERE column_id IN (SELECT id FROM columns WHERE board_id = ?)",
@@ -191,12 +196,30 @@ export async function getBoard(
     linksByTask.set(l.to_task_id, incoming);
   }
 
+  const itemRows = await env.DB.prepare(
+    `SELECT i.id, i.task_id, i.text, i.done, i.position
+       FROM task_checklist_items i
+       JOIN tasks t ON t.id = i.task_id
+       JOIN columns c ON c.id = t.column_id
+      WHERE c.board_id = ?
+      ORDER BY i.position ASC, i.created_at ASC`,
+  )
+    .bind(boardId)
+    .all<{ id: string; task_id: string; text: string; done: number; position: number }>();
+  const checklistByTask = new Map<string, ChecklistItem[]>();
+  for (const r of itemRows.results) {
+    const arr = checklistByTask.get(r.task_id) ?? [];
+    arr.push({ ...r, done: r.done === 1 });
+    checklistByTask.set(r.task_id, arr);
+  }
+
   const byColumn = new Map<string, Task[]>();
   for (const t of tasks.results) {
     const task: Task = {
       ...t,
       running_entry: running && running.task_id === t.id ? running : null,
       links: linksByTask.get(t.id) ?? [],
+      checklist: checklistByTask.get(t.id) ?? [],
     };
     const arr = byColumn.get(t.column_id) ?? [];
     arr.push(task);
@@ -347,6 +370,9 @@ export async function deleteColumn(
     ).bind(columnId, columnId),
     env.DB.prepare(
       "DELETE FROM time_entries WHERE task_id IN (SELECT id FROM tasks WHERE column_id = ?)",
+    ).bind(columnId),
+    env.DB.prepare(
+      "DELETE FROM task_checklist_items WHERE task_id IN (SELECT id FROM tasks WHERE column_id = ?)",
     ).bind(columnId),
     env.DB.prepare("DELETE FROM tasks WHERE column_id = ?").bind(columnId),
     env.DB.prepare("DELETE FROM columns WHERE id = ?").bind(columnId),

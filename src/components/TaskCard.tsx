@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task, TaskLinkView } from "../../shared/types.ts";
@@ -13,6 +14,7 @@ interface Props {
   onDelete: (task: Task) => void;
   onHistory: (task: Task) => void;
   onNavigateToTask: (taskId: string) => void;
+  onToggleChecklist: (taskId: string, itemId: string, done: boolean) => void;
 }
 
 /** Prefix text for one link row, per relation_type + direction. */
@@ -34,7 +36,9 @@ export function TaskCard({
   onDelete,
   onHistory,
   onNavigateToTask,
+  onToggleChecklist,
 }: Props) {
+  const [stepsOpen, setStepsOpen] = useState(false);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: task.id });
 
@@ -72,6 +76,47 @@ export function TaskCard({
 
       {task.description && (
         <div className="card-desc">{task.description}</div>
+      )}
+
+      {task.checklist.length > 0 && (
+        <div className="card-checklist">
+          <button
+            type="button"
+            className="checklist-badge"
+            aria-expanded={stepsOpen}
+            onClick={() => setStepsOpen((v) => !v)}
+          >
+            <span>
+              {stepsOpen ? "▾" : "▸"} ☑ {task.checklist.filter((i) => i.done).length}/
+              {task.checklist.length}
+            </span>
+            <span className="checklist-bar">
+              <span
+                style={{
+                  width: `${Math.round(
+                    (task.checklist.filter((i) => i.done).length / task.checklist.length) * 100,
+                  )}%`,
+                }}
+              />
+            </span>
+          </button>
+          {stepsOpen && (
+            <ul className="checklist-list">
+              {task.checklist.map((item) => (
+                <li key={item.id}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={item.done}
+                      onChange={(e) => onToggleChecklist(task.id, item.id, e.target.checked)}
+                    />
+                    <span className={item.done ? "done" : undefined}>{item.text}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
 
       {task.links.length > 0 && (

@@ -24,6 +24,7 @@ interface Props {
   onDelete: (task: Task) => void;
   onHistory: (task: Task) => void;
   onNavigateToTask: (taskId: string) => void;
+  onToggleChecklist: (taskId: string, itemId: string, done: boolean) => void;
 }
 
 export function ColumnView({
@@ -39,6 +40,7 @@ export function ColumnView({
   onDelete,
   onHistory,
   onNavigateToTask,
+  onToggleChecklist,
 }: Props) {
   // Droppable so an empty column still accepts task drops (raw column id).
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
@@ -113,6 +115,7 @@ export function ColumnView({
               onDelete={onDelete}
               onHistory={onHistory}
               onNavigateToTask={onNavigateToTask}
+              onToggleChecklist={onToggleChecklist}
             />
           ))}
           {column.tasks.length === 0 && (

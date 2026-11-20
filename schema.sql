@@ -194,3 +194,13 @@ CREATE INDEX IF NOT EXISTS idx_tasks_origin_voice_note
 CREATE INDEX IF NOT EXISTS idx_tasks_updated_at
   ON tasks(updated_at DESC);
 
+-- Checklist steps per task (see migrations/0007_task_checklist.sql).
+CREATE TABLE IF NOT EXISTS task_checklist_items (
+  id         TEXT PRIMARY KEY,
+  task_id    TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  text       TEXT NOT NULL,
+  done       INTEGER NOT NULL DEFAULT 0 CHECK (done IN (0, 1)),
+  position   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_checklist_task ON task_checklist_items(task_id, position);
