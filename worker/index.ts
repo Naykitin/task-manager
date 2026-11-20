@@ -146,6 +146,9 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   if (a === "voice-notes" && b === "availability" && !c && method === "GET") {
     return voice.getVoiceAvailability(env);
   }
+  if (a === "voice-notes" && !voice.isVoiceInboxEnabled(env)) {
+    return json({ error: "Voice Inbox is disabled" }, { status: 404 });
+  }
   if (a === "voice-notes" && !b) {
     if (method === "GET") return voice.listVoiceNotes(url, userId, env);
     if (method === "POST") return voice.createVoiceNote(req, userId, env);

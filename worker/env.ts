@@ -7,6 +7,8 @@ export interface Env {
   INVITE_CODE: string;
   /** Claude API key for voice-note structuring. Set via `wrangler secret put ANTHROPIC_API_KEY`. */
   ANTHROPIC_API_KEY: string;
+  /** Feature flag: Voice Inbox is only reachable when this is exactly "true". */
+  VOICE_INBOX_ENABLED?: string;
   /**
    * Optional comma-separated browser Origins allowed to call /mcp (e.g.
    * "https://claude.ai"). Requests without an Origin header (CLI/server
