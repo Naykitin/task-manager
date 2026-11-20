@@ -130,12 +130,15 @@ If your client only supports local `stdio` subprocesses instead of HTTP:
 ```
 Or run `npm run mcp:bridge`.
 
-Tools: `list_boards`, `get_board`, `search_tasks`, `get_task`, `get_active_timer`,
-`get_timesheet` (read); `create_board`, `create_column`, `create_task`,
-`bulk_create_tasks`, `update_task`, `move_task`, `link_tasks`, `start_timer`,
-`stop_timer` (write); `delete_task`, `delete_column`, `delete_board` (delete).
-Also resources (`taskmanager://boards`, `taskmanager://active-timer`) and prompts
-(`daily_standup`, `break_down_goal`). Browser callers must be listed in the
+Tools: `list_boards`, `get_board` (`detail='summary'` for big boards), `search_tasks`,
+`get_task`, `get_active_timer`, `get_timesheet` (read); `create_board`,
+`update_board`, `create_column`, `update_column`, `move_column`, `create_task`,
+`bulk_create_tasks`, `update_task`, `move_task`, `bulk_move_tasks`, `link_tasks`,
+`unlink_tasks`, `start_timer`, `stop_timer`, `add_time_entry`, `update_time_entry`
+(write); `delete_task`, `delete_column`, `delete_board`, `delete_time_entry` (delete).
+Also resources (`taskmanager://boards`, `taskmanager://active-timer`, templates
+`taskmanager://board/{id}` and `taskmanager://task/{id}`) and prompts
+(`daily_standup`, `weekly_review`, `plan_my_day`, `break_down_goal`). Browser callers must be listed in the
 optional `MCP_ALLOWED_ORIGINS` var; non-browser clients send no Origin and are
 unaffected.
 
