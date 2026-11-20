@@ -12,6 +12,11 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
+- **Backup & restore of tracked time:** Timesheet page -> "Backup all time entries (CSV)"
+  downloads every entry (board, column, task, start/end). "Restore from CSV" shows a
+  dry-run preview first, then imports; existing entries are skipped, so it is safe to
+  repeat. The per-day timesheet export is accepted too (approximate, 09:00 local).
+  For a full database backup use `wrangler d1 export` / D1 Time Travel.
 - **Voice Inbox (optional, hidden by default — set `VOICE_INBOX_ENABLED="true"` in `wrangler.jsonc` vars to enable):** dictate (Web Speech API) or type a note →
   Claude API extracts concrete tasks + relations to existing tasks → you
   review/edit every suggestion → apply writes tasks + links atomically.
