@@ -33,9 +33,5 @@
   "vars": {
     // JWT_SECRET and INVITE_CODE are set as SECRETS for production
     // (wrangler secret put JWT_SECRET). For local dev they live in .dev.vars.
-
-    // Voice Inbox (AI voice-note -> tasks) is hidden by default; MCP covers that
-    // workflow. Set to "true" and redeploy to bring it back (also needs ANTHROPIC_API_KEY).
-    "VOICE_INBOX_ENABLED": "false"
   }
 }

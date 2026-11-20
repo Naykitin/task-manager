@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import type { TimeEntry } from "../../shared/types.ts";
 import { assertTaskOwner, assertTimeEntryOwner } from "../db.ts";
 import { HttpError, json, newId, nowIso, readJson } from "../util.ts";
+import { cappedEnd, getAutoStopHours } from "../lib/autostop.ts";
 
 function durationSeconds(startedAt: string, endedAt: string): number {
   const secs = Math.round(
@@ -33,6 +34,7 @@ async function stopRunningForUser(
     .first<TimeEntry>();
   if (!running) return null;
 
+  endedAt = cappedEnd(running.started_at, endedAt, await getAutoStopHours(env, userId));
   const duration = durationSeconds(running.started_at, endedAt);
   await env.DB.prepare(
     "UPDATE time_entries SET ended_at = ?, duration_seconds = ? WHERE id = ?",
@@ -90,16 +92,17 @@ export async function stopTimer(
     .first<TimeEntry>();
   if (!running) throw new HttpError(409, "No running timer for this task");
 
-  const duration = durationSeconds(running.started_at, now);
+  const endedAt = cappedEnd(running.started_at, now, await getAutoStopHours(env, userId));
+  const duration = durationSeconds(running.started_at, endedAt);
   await env.DB.prepare(
     "UPDATE time_entries SET ended_at = ?, duration_seconds = ? WHERE id = ?",
   )
-    .bind(now, duration, running.id)
+    .bind(endedAt, duration, running.id)
     .run();
 
   const entry: TimeEntry = {
     ...running,
-    ended_at: now,
+    ended_at: endedAt,
     duration_seconds: duration,
   };
   return json({ entry });

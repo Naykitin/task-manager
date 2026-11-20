@@ -104,7 +104,19 @@ export async function verifySessionToken(
 ): Promise<string | null> {
   try {
     const { payload } = await jwtVerify(token, secretKey(env));
-    return typeof payload.sub === "string" ? payload.sub : null;
+    if (typeof payload.sub !== "string") return null;
+    // Reject sessions issued before "sign out everywhere" / a password change.
+    const row = await env.DB.prepare("SELECT sessions_valid_after FROM users WHERE id = ?")
+      .bind(payload.sub)
+      .first<{ sessions_valid_after: string | null }>();
+    if (!row) return null;
+    if (
+      row.sessions_valid_after &&
+      (payload.iat ?? 0) < Math.floor(Date.parse(row.sessions_valid_after) / 1000)
+    ) {
+      return null;
+    }
+    return payload.sub;
   } catch {
     return null;
   }

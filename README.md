@@ -12,6 +12,12 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
+- **Settings (gear icon):** Account (change password, sign out other devices), AI & Voice
+  (on/off switch for dictation + AI task generation, your own Anthropic API key stored
+  encrypted), Time tracking (auto-stop a forgotten timer after N hours), Appearance
+  (dark / light / system), Data (CSV backup & import) and Integrations (MCP keys, apps, log).
+  Requires migration `0008_settings.sql` and the `SETTINGS_ENCRYPTION_KEY` secret
+  (`npx wrangler secret put SETTINGS_ENCRYPTION_KEY`) to be able to save API keys.
 - **Live sync across devices:** every open tab/device keeps a WebSocket to a per-user
   Durable Object (`UserHub`). When one device (or an MCP client) changes anything - starts
   or stops a timer, moves a task, ticks a step - the others refresh instantly. Sockets
@@ -25,7 +31,7 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
   dry-run preview first, then imports; existing entries are skipped, so it is safe to
   repeat. The per-day timesheet export is accepted too (approximate, 09:00 local).
   For a full database backup use `wrangler d1 export` / D1 Time Travel.
-- **Voice Inbox (optional, hidden by default — set `VOICE_INBOX_ENABLED="true"` in `wrangler.jsonc` vars to enable):** dictate (Web Speech API) or type a note →
+- **Voice Inbox (optional, off by default — enable it in Settings > AI & Voice):** dictate (Web Speech API) or type a note →
   Claude API extracts concrete tasks + relations to existing tasks → you
   review/edit every suggestion → apply writes tasks + links atomically.
   Entirely optional — the rest of the app works without it, see below.
@@ -87,7 +93,7 @@ the session cookie and is scoped to the logged-in user.
 | PATCH / DELETE | `/api/time-entries/:id` | edit / delete a time entry directly |
 | GET  | `/api/timesheet?start=&end=&tzOffset=` | grouped by day/task/board + total |
 | GET  | `/api/timesheet/export?start=&end=&tzOffset=` | CSV download |
-| GET  | `/api/voice-notes/availability` | `{ available }` — is `ANTHROPIC_API_KEY` configured |
+| GET  | `/api/voice-notes/availability` | `{ available }` — Voice Inbox switched on in Settings and an Anthropic key available |
 | GET  | `/api/voice-notes` | list your voice notes, `?status=pending\|reviewed\|discarded` |
 | POST | `/api/voice-notes` | `{ transcript }` — store a raw note, status `pending` |
 | POST | `/api/voice-notes/:id/structure` | `{ board_id }` — Claude proposes tasks/links for that one board |
