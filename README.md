@@ -12,7 +12,7 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
-- **Voice Inbox (optional):** dictate (Web Speech API) or type a note →
+- **Voice Inbox (optional, hidden by default — set `VOICE_INBOX_ENABLED="true"` in `wrangler.jsonc` vars to enable):** dictate (Web Speech API) or type a note →
   Claude API extracts concrete tasks + relations to existing tasks → you
   review/edit every suggestion → apply writes tasks + links atomically.
   Entirely optional — the rest of the app works without it, see below.

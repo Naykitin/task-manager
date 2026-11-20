@@ -48,6 +48,14 @@ export function BoardView() {
   >(null);
   const [historyTask, setHistoryTask] = useState<Task | null>(null);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // Voice Inbox is feature-flagged server-side (VOICE_INBOX_ENABLED); hidden unless available.
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
+  useEffect(() => {
+    api
+      .getVoiceAvailability()
+      .then(({ available }) => setVoiceAvailable(available))
+      .catch(() => setVoiceAvailable(false));
+  }, []);
   const [confirmModal, setConfirmModal] = useState<
     { title: string; message: string; onConfirm: () => void } | null
   >(null);
@@ -414,7 +422,7 @@ export function BoardView() {
 
       {error && <div className="banner-error">{error}</div>}
 
-      {currentBoard && (
+      {currentBoard && voiceAvailable && (
         <div className="voice-toggle-wrap">
           <button className="btn ghost sm" onClick={() => setVoiceOpen((v) => !v)}>
             {voiceOpen ? "▾" : "▸"} Add tasks via voice/text

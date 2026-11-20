@@ -15,7 +15,12 @@ const DIRECTIONS = ["this_blocks_that", "that_blocks_this"];
  * instead of only finding out after the user has typed a transcript.
  */
 function isVoiceStructuringAvailable(env: Env): boolean {
-  return Boolean(env.ANTHROPIC_API_KEY && env.ANTHROPIC_API_KEY.trim());
+  return isVoiceInboxEnabled(env) && Boolean(env.ANTHROPIC_API_KEY && env.ANTHROPIC_API_KEY.trim());
+}
+
+/** Feature flag (wrangler.jsonc vars). Off by default; code and tables are kept. */
+export function isVoiceInboxEnabled(env: Env): boolean {
+  return env.VOICE_INBOX_ENABLED === "true";
 }
 
 /** GET /api/voice-notes/availability — whether Claude structuring is configured. */
