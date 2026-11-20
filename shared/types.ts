@@ -11,7 +11,20 @@ export interface Board {
   id: string;
   user_id: string;
   name: string;
+  client_id: string | null;
   created_at: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  color: string | null;
+  is_personal: boolean;
+  /** Hourly rate in minor units (cents); null = not billed. */
+  rate_minor: number | null;
+  currency: string;
+  archived_at: string | null;
+  board_count?: number;
 }
 
 export interface Column {
@@ -70,6 +83,7 @@ export interface TimesheetTaskRow {
   task_title: string;
   board_id: string;
   board_name: string;
+  client_name?: string | null;
   duration_seconds: number;
 }
 
@@ -101,6 +115,22 @@ export interface TimesheetResponse {
   days: TimesheetDay[];
   by_board: TimesheetBoardTotal[];
   by_task: TimesheetTaskTotal[];
+  by_client: TimesheetClientTotal[];
+  /** Money for the period, one row per currency (no conversion). */
+  amounts: MoneyAmount[];
+}
+
+export interface MoneyAmount {
+  currency: string;
+  amount_minor: number;
+}
+
+export interface TimesheetClientTotal {
+  client_id: string | null; // null = boards without a client
+  client_name: string;
+  color: string | null;
+  duration_seconds: number;
+  amounts: MoneyAmount[];
 }
 
 // ---- Voice-note structuring ----

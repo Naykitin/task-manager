@@ -1,5 +1,7 @@
 import type { Env } from "../env.ts";
 import type {
+  MoneyAmount,
+  TimesheetClientTotal,
   TimesheetDay,
   TimesheetResponse,
   TimesheetTaskRow,
@@ -16,6 +18,25 @@ interface CompletedRow {
   task_title: string;
   board_id: string;
   board_name: string;
+  client_id: string | null;
+  client_name: string | null;
+  client_color: string | null;
+  rate_minor: number | null; // snapshot, else the client's current rate
+  currency: string | null;
+}
+
+/** Accumulates rate x seconds per currency; rounded to minor units once, at the end. */
+class Money {
+  private rateSeconds = new Map<string, number>();
+  add(secs: number, rate: number | null, currency: string | null) {
+    if (rate === null || !currency) return;
+    this.rateSeconds.set(currency, (this.rateSeconds.get(currency) ?? 0) + secs * rate);
+  }
+  amounts(): MoneyAmount[] {
+    return [...this.rateSeconds.entries()]
+      .map(([currency, rs]) => ({ currency, amount_minor: Math.round(rs / 3600) }))
+      .sort((a, b) => a.currency.localeCompare(b.currency));
+  }
 }
 
 /** Local YYYY-MM-DD for an ISO timestamp, shifted by tzOffset minutes. */
@@ -51,24 +72,43 @@ async function computeTimesheet(
     Date.UTC(ey, em - 1, ed) + 24 * 3600_000 - tzOffsetMin * 60_000,
   ).toISOString();
 
+  // Optional client filter: a client id, or "none" for boards without a client.
+  const clientFilter = url.searchParams.get("client_id");
+  let clientSql = "";
+  const binds: unknown[] = [userId, startBoundary, endBoundary];
+  if (clientFilter === "none") {
+    clientSql = "AND b.client_id IS NULL";
+  } else if (clientFilter) {
+    clientSql = "AND b.client_id = ?";
+    binds.push(clientFilter);
+  }
+
   const { results } = await env.DB.prepare(
     `SELECT te.started_at        AS started_at,
             te.duration_seconds  AS duration_seconds,
             t.id                 AS task_id,
             t.title              AS task_title,
             b.id                 AS board_id,
-            b.name               AS board_name
+            b.name               AS board_name,
+            cl.id                AS client_id,
+            cl.name              AS client_name,
+            cl.color             AS client_color,
+            COALESCE(te.rate_minor, cl.rate_minor) AS rate_minor,
+            CASE WHEN te.rate_minor IS NOT NULL THEN te.currency
+                 WHEN cl.rate_minor IS NOT NULL THEN cl.currency END AS currency
        FROM time_entries te
        JOIN tasks t   ON t.id = te.task_id
        JOIN columns c ON c.id = t.column_id
        JOIN boards b  ON b.id = c.board_id
+       LEFT JOIN clients cl ON cl.id = b.client_id
       WHERE te.user_id = ?
         AND te.ended_at IS NOT NULL
         AND te.started_at >= ?
         AND te.started_at <  ?
+        ${clientSql}
       ORDER BY te.started_at ASC`,
   )
-    .bind(userId, startBoundary, endBoundary)
+    .bind(...binds)
     .all<CompletedRow>();
 
   // day -> task_id -> row
@@ -78,11 +118,31 @@ async function computeTimesheet(
     string,
     { title: string; board_id: string; board_name: string; secs: number }
   >();
+  const clientTotals = new Map<
+    string,
+    { id: string | null; name: string; color: string | null; secs: number; money: Money }
+  >();
+  const totalMoney = new Money();
   let total = 0;
 
   for (const r of results) {
     const secs = r.duration_seconds ?? 0;
     total += secs;
+    totalMoney.add(secs, r.rate_minor, r.currency);
+    const ck = r.client_id ?? "";
+    let ct = clientTotals.get(ck);
+    if (!ct) {
+      ct = {
+        id: r.client_id,
+        name: r.client_name ?? "No client",
+        color: r.client_color,
+        secs: 0,
+        money: new Money(),
+      };
+      clientTotals.set(ck, ct);
+    }
+    ct.secs += secs;
+    ct.money.add(secs, r.rate_minor, r.currency);
     const day = localDate(r.started_at, tzOffsetMin);
 
     let tasks = dayMap.get(day);
@@ -99,6 +159,7 @@ async function computeTimesheet(
         task_title: r.task_title,
         board_id: r.board_id,
         board_name: r.board_name,
+        client_name: r.client_name,
         duration_seconds: secs,
       });
     }
@@ -157,6 +218,18 @@ async function computeTimesheet(
         duration_seconds: v.secs,
       }))
       .sort((a, b) => b.duration_seconds - a.duration_seconds),
+    amounts: totalMoney.amounts(),
+    by_client: [...clientTotals.values()]
+      .map(
+        (c): TimesheetClientTotal => ({
+          client_id: c.id,
+          client_name: c.name,
+          color: c.color,
+          duration_seconds: c.secs,
+          amounts: c.money.amounts(),
+        }),
+      )
+      .sort((a, b) => b.duration_seconds - a.duration_seconds),
     by_task: [...taskTotals.entries()]
       .map(([task_id, v]) => ({
         task_id,
@@ -197,13 +270,14 @@ export async function exportTimesheetCsv(
 ): Promise<Response> {
   const data = await computeTimesheet(url, userId, env);
   const lines: string[] = [
-    "date,board,task,duration_hms,duration_hours,duration_seconds",
+    "date,client,board,task,duration_hms,duration_hours,duration_seconds",
   ];
   for (const day of data.days) {
     for (const t of day.tasks) {
       lines.push(
         [
           day.date,
+          csvEscape(t.client_name ?? ""),
           csvEscape(t.board_name),
           csvEscape(t.task_title),
           hms(t.duration_seconds),
@@ -215,8 +289,11 @@ export async function exportTimesheetCsv(
   }
   lines.push("");
   lines.push(
-    `TOTAL,,,${hms(data.total_seconds)},${(data.total_seconds / 3600).toFixed(2)},${data.total_seconds}`,
+    `TOTAL,,,,${hms(data.total_seconds)},${(data.total_seconds / 3600).toFixed(2)},${data.total_seconds}`,
   );
+  for (const m of data.amounts) {
+    lines.push(`AMOUNT ${m.currency},,,,${(m.amount_minor / 100).toFixed(2)}`);
+  }
 
   const csv = lines.join("\n");
   return new Response(csv, {

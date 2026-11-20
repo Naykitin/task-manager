@@ -21,13 +21,29 @@ CREATE TABLE IF NOT EXISTS users (
   sessions_valid_after TEXT
 );
 
+-- Clients group boards for per-customer time and money (migrations/0009_clients.sql).
+CREATE TABLE IF NOT EXISTS clients (
+  id          TEXT PRIMARY KEY,
+  user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  color       TEXT,
+  is_personal INTEGER NOT NULL DEFAULT 0 CHECK (is_personal IN (0, 1)),
+  rate_minor  INTEGER CHECK (rate_minor IS NULL OR rate_minor >= 0),
+  currency    TEXT NOT NULL DEFAULT 'USD',
+  archived_at TEXT,
+  created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_clients_user ON clients(user_id);
+
 CREATE TABLE IF NOT EXISTS boards (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name       TEXT NOT NULL,
+  client_id  TEXT REFERENCES clients(id) ON DELETE SET NULL,
   created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_boards_user ON boards(user_id);
+CREATE INDEX IF NOT EXISTS idx_boards_client ON boards(client_id) WHERE client_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS columns (
   id       TEXT PRIMARY KEY,
@@ -82,7 +98,9 @@ CREATE TABLE IF NOT EXISTS time_entries (
   user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   started_at       TEXT NOT NULL,
   ended_at         TEXT,
-  duration_seconds INTEGER
+  duration_seconds INTEGER,
+  rate_minor       INTEGER, -- rate snapshot when started (0009)
+  currency         TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_time_entries_task ON time_entries(task_id);
 CREATE INDEX IF NOT EXISTS idx_time_entries_user ON time_entries(user_id);

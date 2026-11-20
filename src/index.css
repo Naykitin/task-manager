@@ -1389,3 +1389,22 @@ input[type="datetime-local"]:focus {
 :root[data-theme="light"] .topbar {
   background: rgba(255, 255, 255, 0.85);
 }
+
+/* ---- Clients ---- */
+.board-client { display: inline-flex; align-items: center; gap: 6px; }
+.board-client select { width: auto; min-width: 130px; }
+.client-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.client-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: 10px; }
+.client-item.editing { display: block; }
+.client-item.archived { opacity: 0.6; }
+.client-main { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.client-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.client-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.client-form { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; width: 100%; }
+.client-form > input[aria-label="Client name"] { flex: 1; min-width: 180px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; outline: none; }
+.client-rate, .client-check { display: inline-flex; align-items: center; gap: 6px; color: var(--text-dim); font-size: 13px; }
+.client-rate input { width: 90px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 7px 9px; outline: none; }
+.swatch { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; padding: 0; cursor: pointer; }
+.swatch.active { border-color: var(--text); }
+.client-colors { display: inline-flex; gap: 6px; }
+.client-form-actions { display: flex; gap: 8px; }

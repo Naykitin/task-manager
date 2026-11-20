@@ -19,6 +19,25 @@ function parseIsoDate(value: unknown, field: string): string {
   return new Date(value).toISOString();
 }
 
+/** The client's rate in force right now for a task's board (null/null if none). */
+async function rateSnapshot(
+  env: Env,
+  taskId: string,
+): Promise<{ rate_minor: number | null; currency: string | null }> {
+  const row = await env.DB.prepare(
+    `SELECT cl.rate_minor, cl.currency
+       FROM tasks t
+       JOIN columns c  ON c.id = t.column_id
+       JOIN boards b   ON b.id = c.board_id
+       JOIN clients cl ON cl.id = b.client_id
+      WHERE t.id = ?`,
+  )
+    .bind(taskId)
+    .first<{ rate_minor: number | null; currency: string }>();
+  if (!row || row.rate_minor === null) return { rate_minor: null, currency: null };
+  return row;
+}
+
 /** Stop whatever timer the user currently has running. Returns it if any. */
 async function stopRunningForUser(
   env: Env,
@@ -57,10 +76,11 @@ export async function startTimer(
   const stopped = await stopRunningForUser(env, userId, now);
 
   const id = newId();
+  const snap = await rateSnapshot(env, taskId);
   await env.DB.prepare(
-    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?, NULL, NULL)",
+    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds, rate_minor, currency) VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)",
   )
-    .bind(id, taskId, userId, now)
+    .bind(id, taskId, userId, now, snap.rate_minor, snap.currency)
     .run();
 
   const entry: TimeEntry = {
@@ -142,10 +162,11 @@ export async function createManualEntry(
 
   const id = newId();
   const duration = durationSeconds(startedAt, endedAt);
+  const snap = await rateSnapshot(env, taskId);
   await env.DB.prepare(
-    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds) VALUES (?, ?, ?, ?, ?, ?)",
+    "INSERT INTO time_entries (id, task_id, user_id, started_at, ended_at, duration_seconds, rate_minor, currency) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   )
-    .bind(id, taskId, userId, startedAt, endedAt, duration)
+    .bind(id, taskId, userId, startedAt, endedAt, duration, snap.rate_minor, snap.currency)
     .run();
 
   const entry: TimeEntry = {
