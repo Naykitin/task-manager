@@ -23,6 +23,7 @@ import { api } from "../api.ts";
 import { formatDuration } from "../format.ts";
 import { COLUMN_PREFIX, ColumnView, columnSortId } from "./ColumnView.tsx";
 import { ConfirmModal } from "./ConfirmModal.tsx";
+import { InputModal } from "./InputModal.tsx";
 import { TaskModal } from "./TaskModal.tsx";
 import { TimeLogModal } from "./TimeLogModal.tsx";
 import { VoiceInbox } from "./VoiceInbox.tsx";
@@ -79,6 +80,16 @@ export function BoardView() {
     { title: string; message: string; onConfirm: () => void } | null
   >(null);
   const closeConfirm = () => setConfirmModal(null);
+  const [inputModal, setInputModal] = useState<
+    | {
+        title: string;
+        label: string;
+        submitLabel: string;
+        initial?: string;
+        onSubmit: (value: string) => Promise<void>;
+      }
+    | null
+  >(null);
 
   const setColumns = useCallback((next: ColumnWithTasks[]) => {
     columnsRef.current = next;
@@ -176,12 +187,16 @@ export function BoardView() {
     });
 
   // ---- Task CRUD ----
-  async function submitTask(values: { title: string; description: string }) {
+  async function submitTask(values: { title: string; description: string; steps: string[] }) {
     if (!modal) return;
     if (modal.mode === "create") {
-      await api.createTask(modal.columnId, values.title, values.description);
+      const { task } = await api.createTask(modal.columnId, values.title, values.description);
+      if (values.steps.length > 0) await api.addChecklistItems(task.id, values.steps);
     } else {
-      await api.updateTask(modal.task.id, values);
+      await api.updateTask(modal.task.id, {
+        title: values.title,
+        description: values.description,
+      });
     }
     setModal(null);
     await reload();
@@ -201,6 +216,27 @@ export function BoardView() {
     });
   };
 
+  // Ticking a step on a card: optimistic, reload if the server rejects it.
+  const onToggleChecklist = (taskId: string, itemId: string, done: boolean) => {
+    setColumns(
+      columnsRef.current.map((c) => ({
+        ...c,
+        tasks: c.tasks.map((t) =>
+          t.id !== taskId
+            ? t
+            : {
+                ...t,
+                checklist: t.checklist.map((i) => (i.id === itemId ? { ...i, done } : i)),
+              },
+        ),
+      })),
+    );
+    api.updateChecklistItem(itemId, { done }).catch(async (e) => {
+      setError(e instanceof Error ? e.message : "Failed to update step");
+      await reload();
+    });
+  };
+
   // Clicking a linked task's title "navigates" to it the same way the
   // existing card-title click does: open its edit modal. No separate
   // route/highlight mechanism exists in this app to reuse instead.
@@ -215,21 +251,31 @@ export function BoardView() {
   };
 
   // ---- Columns ----
-  const onAddColumn = () =>
-    withBusy(async () => {
-      if (!currentBoardId) return;
-      const name = prompt("New column name:");
-      if (!name?.trim()) return;
-      await api.createColumn(currentBoardId, name.trim());
-      await reload();
+  const onAddColumn = () => {
+    const boardId = currentBoardId;
+    if (!boardId) return;
+    setInputModal({
+      title: "New column",
+      label: "Column name",
+      submitLabel: "Create",
+      onSubmit: async (name) => {
+        await api.createColumn(boardId, name);
+        await reload();
+      },
     });
+  };
 
   const onRenameColumn = (column: ColumnWithTasks) =>
-    withBusy(async () => {
-      const name = prompt("Rename column:", column.name);
-      if (!name?.trim() || name.trim() === column.name) return;
-      await api.updateColumn(column.id, { name: name.trim() });
-      await reload();
+    setInputModal({
+      title: "Rename column",
+      label: "Column name",
+      submitLabel: "Save",
+      initial: column.name,
+      onSubmit: async (name) => {
+        if (name === column.name) return;
+        await api.updateColumn(column.id, { name });
+        await reload();
+      },
     });
 
   const onDeleteColumn = (column: ColumnWithTasks) => {
@@ -247,25 +293,32 @@ export function BoardView() {
   };
 
   const onAddBoard = () =>
-    withBusy(async () => {
-      const name = prompt("New board name:");
-      if (!name?.trim()) return;
-      const { board } = await api.createBoard(name.trim());
-      setBoards((b) => [...b, board]);
-      await switchBoard(board.id);
+    setInputModal({
+      title: "New board",
+      label: "Board name",
+      submitLabel: "Create",
+      onSubmit: async (name) => {
+        const { board } = await api.createBoard(name);
+        setBoards((b) => [...b, board]);
+        await switchBoard(board.id);
+      },
     });
 
-  const onRenameBoard = () =>
-    withBusy(async () => {
-      const board = boards.find((b) => b.id === currentBoardId);
-      if (!board) return;
-      const name = prompt("Rename board:", board.name);
-      if (!name?.trim() || name.trim() === board.name) return;
-      const { board: updated } = await api.updateBoard(board.id, {
-        name: name.trim(),
-      });
-      setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)));
+  const onRenameBoard = () => {
+    const board = boards.find((b) => b.id === currentBoardId);
+    if (!board) return;
+    setInputModal({
+      title: "Rename board",
+      label: "Board name",
+      submitLabel: "Save",
+      initial: board.name,
+      onSubmit: async (name) => {
+        if (name === board.name) return;
+        const { board: updated } = await api.updateBoard(board.id, { name });
+        setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)));
+      },
     });
+  };
 
   const onDeleteBoard = () => {
     const board = boards.find((b) => b.id === currentBoardId);
@@ -511,6 +564,7 @@ export function BoardView() {
                 onDelete={onDeleteTask}
                 onHistory={(task) => setHistoryTask(task)}
                 onNavigateToTask={onNavigateToTask}
+                onToggleChecklist={onToggleChecklist}
               />
             ))}
             <button className="add-column" onClick={onAddColumn}>
@@ -535,6 +589,7 @@ export function BoardView() {
           initial={modal.mode === "edit" ? modal.task : undefined}
           onCancel={() => setModal(null)}
           onSubmit={submitTask}
+          onChecklistChanged={reload}
         />
       )}
       {historyTask && (
@@ -542,6 +597,16 @@ export function BoardView() {
           task={historyTask}
           onClose={() => setHistoryTask(null)}
           onChange={reload}
+        />
+      )}
+      {inputModal && (
+        <InputModal
+          title={inputModal.title}
+          label={inputModal.label}
+          submitLabel={inputModal.submitLabel}
+          initial={inputModal.initial}
+          onCancel={() => setInputModal(null)}
+          onSubmit={inputModal.onSubmit}
         />
       )}
       {confirmModal && (

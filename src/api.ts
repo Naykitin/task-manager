@@ -2,6 +2,7 @@ import type {
   ApplyNewTaskInput,
   Board,
   BoardDetail,
+  ChecklistItem,
   Column,
   StructuringResult,
   Task,
@@ -116,6 +117,23 @@ export const api = {
     request<{ task: Task }>(`/api/tasks/${id}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
+    }),
+  addChecklistItems: (taskId: string, items: string[]) =>
+    request<{ items: ChecklistItem[] }>(`/api/tasks/${taskId}/checklist`, {
+      method: "POST",
+      body: JSON.stringify({ items }),
+    }),
+  updateChecklistItem: (id: string, patch: { text?: string; done?: boolean }) =>
+    request<{ item: ChecklistItem }>(`/api/checklist/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteChecklistItem: (id: string) =>
+    request<{ ok: true }>(`/api/checklist/${id}`, { method: "DELETE" }),
+  reorderChecklist: (taskId: string, item_ids: string[]) =>
+    request<{ items: ChecklistItem[] }>(`/api/tasks/${taskId}/checklist/order`, {
+      method: "PUT",
+      body: JSON.stringify({ item_ids }),
     }),
   deleteTask: (id: string) =>
     request<{ ok: true }>(`/api/tasks/${id}`, { method: "DELETE" }),

@@ -21,6 +21,14 @@ export interface Column {
   position: number;
 }
 
+export interface ChecklistItem {
+  id: string;
+  task_id: string;
+  text: string;
+  done: boolean;
+  position: number;
+}
+
 export interface Task {
   id: string;
   column_id: string;
@@ -35,6 +43,7 @@ export interface Task {
   total_seconds: number; // sum of completed time entries
   running_entry: TimeEntry | null; // the active (unstopped) entry, if any
   links: TaskLinkView[]; // this task's relations to other tasks
+  checklist: ChecklistItem[]; // ordered steps that can be ticked off
 }
 
 export interface TimeEntry {
