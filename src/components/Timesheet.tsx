@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { TimesheetResponse } from "../../shared/types.ts";
 import { api, type ImportResult } from "../api.ts";
 import {
@@ -20,6 +20,24 @@ export function Timesheet() {
   const [preview, setPreview] = useState<ImportResult | null>(null);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [menuOpen]);
 
   async function onPickFile(file: File | undefined) {
     if (!file) return;
@@ -126,31 +144,52 @@ export function Timesheet() {
             Apply
           </button>
         </div>
-        <a
-          className="btn accent sm"
-          href={api.timesheetExportUrl(start, end)}
-          download
-        >
-          ⬇ Export CSV
-        </a>
-      </div>
-
-      <div className="ts-backup">
-        <a className="btn ghost sm" href={api.timeEntriesExportUrl} download>
-          ⬇ Backup all time entries (CSV)
-        </a>
-        <label className="btn ghost sm">
-          ⬆ Restore from CSV…
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            hidden
-            onChange={(e) => {
-              void onPickFile(e.target.files?.[0]);
-              e.target.value = "";
-            }}
-          />
-        </label>
+        <div className="ts-actions">
+          <div className="menu-wrap" ref={menuRef}>
+            <button
+              className="btn accent sm"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+            >
+              ⬇ Export CSV ▾
+            </button>
+            {menuOpen && (
+              <div className="menu" role="menu">
+                <a
+                  role="menuitem"
+                  href={api.timesheetExportUrl(start, end)}
+                  download
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <strong>Report for selected period</strong>
+                  <span>One row per day and task</span>
+                </a>
+                <a
+                  role="menuitem"
+                  href={api.timeEntriesExportUrl}
+                  download
+                  onClick={() => setMenuOpen(false)}
+                >
+                  <strong>Full backup (all entries)</strong>
+                  <span>Exact start/end times, can be restored</span>
+                </a>
+              </div>
+            )}
+          </div>
+          <label className="btn accent sm">
+            ⬆ Import CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              hidden
+              onChange={(e) => {
+                void onPickFile(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
+          </label>
+        </div>
       </div>
 
       {preview && (
