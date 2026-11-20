@@ -71,3 +71,46 @@ export function monthRange(d: Date): { start: string; end: string } {
   const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
   return { start: toYmd(start), end: toYmd(end) };
 }
+
+/** Number of decimal places the currency uses (2 for USD, 0 for JPY). */
+export function currencyDigits(currency: string): number {
+  try {
+    return (
+      new Intl.NumberFormat(undefined, { style: "currency", currency }).resolvedOptions()
+        .maximumFractionDigits ?? 2
+    );
+  } catch {
+    return 2;
+  }
+}
+
+/** Minor units (cents) -> "$1,234.50". Falls back to "1234.50 XYZ" for unknown codes. */
+export function formatMoney(minor: number, currency: string): string {
+  const d = currencyDigits(currency);
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(minor / 10 ** d);
+  } catch {
+    return `${(minor / 10 ** d).toFixed(d)} ${currency}`;
+  }
+}
+
+/** "12.5" typed by the user -> minor units for the currency; null if empty/invalid. */
+export function parseMoneyToMinor(text: string, currency: string): number | null {
+  const t = text.trim().replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 10 ** currencyDigits(currency));
+}
+
+/** Minor units -> editable text such as "50" or "12.50". */
+export function minorToInput(minor: number | null, currency: string): string {
+  if (minor === null) return "";
+  const d = currencyDigits(currency);
+  return (minor / 10 ** d).toFixed(d);
+}
+
+/** "$100.00 + €50.00", or "" when there is no money. */
+export function formatAmounts(amounts: { currency: string; amount_minor: number }[]): string {
+  return amounts.map((a) => formatMoney(a.amount_minor, a.currency)).join(" + ");
+}

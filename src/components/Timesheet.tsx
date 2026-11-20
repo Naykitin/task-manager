@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TimesheetResponse } from "../../shared/types.ts";
+import type { Client, TimesheetResponse } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { CsvImport } from "./CsvImport.tsx";
 import { useLive } from "../live.ts";
 import {
   formatDate,
+  formatAmounts,
   formatDuration,
   formatHours,
   monthRange,
@@ -16,6 +17,10 @@ export function Timesheet() {
   const [start, setStart] = useState(initial.start);
   const [end, setEnd] = useState(initial.end);
   const [data, setData] = useState<TimesheetResponse | null>(null);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientId, setClientId] = useState(""); // "" = all, "none" = no client
+  const clientRef = useRef("");
+  clientRef.current = clientId;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -37,13 +42,13 @@ export function Timesheet() {
     };
   }, [menuOpen]);
 
-  const load = useCallback(async (s: string, e: string, quiet = false) => {
+  const load = useCallback(async (s: string, e: string, quiet = false, cid = clientRef.current) => {
     if (!quiet) {
       setLoading(true);
       setError(null);
     }
     try {
-      setData(await api.timesheet(s, e));
+      setData(await api.timesheet(s, e, cid));
     } catch (err) {
       if (!quiet) setError(err instanceof Error ? err.message : "Failed to load timesheet");
     } finally {
@@ -58,6 +63,7 @@ export function Timesheet() {
 
   useEffect(() => {
     load(start, end);
+    api.listClients().then((r) => setClients(r.clients)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -111,6 +117,24 @@ export function Timesheet() {
               onChange={(e) => setEnd(e.target.value)}
             />
           </label>
+          <label>
+            Client
+            <select
+              value={clientId}
+              onChange={(e) => {
+                setClientId(e.target.value);
+                load(start, end, false, e.target.value);
+              }}
+            >
+              <option value="">All clients</option>
+              <option value="none">No client</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="btn primary sm" onClick={() => load(start, end)}>
             Apply
           </button>
@@ -129,7 +153,7 @@ export function Timesheet() {
               <div className="menu" role="menu">
                 <a
                   role="menuitem"
-                  href={api.timesheetExportUrl(start, end)}
+                  href={api.timesheetExportUrl(start, end, clientId)}
                   download
                   onClick={() => setMenuOpen(false)}
                 >
@@ -171,6 +195,13 @@ export function Timesheet() {
                 {data.start} → {data.end}
               </div>
             </div>
+            {data.amounts.length > 0 && (
+              <div className="ts-card">
+                <div className="ts-label">Earned</div>
+                <div className="ts-value">{formatAmounts(data.amounts)}</div>
+                <div className="ts-sub">At each client's hourly rate</div>
+              </div>
+            )}
             {data.in_progress_seconds > 0 && (
               <div className="ts-card warn">
                 <div className="ts-label">In progress (not counted)</div>
@@ -181,6 +212,38 @@ export function Timesheet() {
               </div>
             )}
           </div>
+
+          {data.by_client.length > 0 && (
+            <div className="ts-panel">
+              <h3>By client</h3>
+              <table className="ts-table">
+                <thead>
+                  <tr>
+                    <th>Client</th>
+                    <th className="num">Hours</th>
+                    <th className="num">Time</th>
+                    <th className="num">Earned</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.by_client.map((c) => (
+                    <tr key={c.client_id ?? "none"}>
+                      <td>
+                        <span
+                          className="client-dot"
+                          style={{ background: c.color ?? "var(--border)" }}
+                        />{" "}
+                        {c.client_name}
+                      </td>
+                      <td className="num">{formatHours(c.duration_seconds)}</td>
+                      <td className="num">{formatDuration(c.duration_seconds)}</td>
+                      <td className="num">{formatAmounts(c.amounts) || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <div className="ts-grid">
             <div className="ts-panel">

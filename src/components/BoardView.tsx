@@ -18,7 +18,7 @@ import {
   horizontalListSortingStrategy,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import type { Board, ColumnWithTasks, Task } from "../../shared/types.ts";
+import type { Board, Client, ColumnWithTasks, Task } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { useLive } from "../live.ts";
 import { formatDuration } from "../format.ts";
@@ -54,6 +54,7 @@ const collisionDetection: CollisionDetection = (args) => {
 
 export function BoardView() {
   const [boards, setBoards] = useState<Board[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [currentBoardId, setCurrentBoardId] = useState<string | null>(null);
   const [columns, setColumnsState] = useState<ColumnWithTasks[]>([]);
   const columnsRef = useRef<ColumnWithTasks[]>([]);
@@ -137,8 +138,12 @@ export function BoardView() {
       return;
     }
     try {
-      const { boards: fresh } = await api.listBoards();
+      const [{ boards: fresh }, { clients: freshClients }] = await Promise.all([
+        api.listBoards(),
+        api.listClients(),
+      ]);
       setBoards(fresh);
+      setClients(freshClients);
       const cur = boardIdRef.current;
       if (cur && fresh.some((b) => b.id === cur)) {
         await loadBoard(cur);
@@ -161,9 +166,13 @@ export function BoardView() {
     let cancelled = false;
     (async () => {
       try {
-        const { boards } = await api.listBoards();
+        const [{ boards }, { clients: initialClients }] = await Promise.all([
+          api.listBoards(),
+          api.listClients(),
+        ]);
         if (cancelled) return;
         setBoards(boards);
+        setClients(initialClients);
         const savedId = localStorage.getItem(LAST_BOARD_KEY);
         const target = boards.find((b) => b.id === savedId) ?? boards[0];
         if (target) {
@@ -352,6 +361,17 @@ export function BoardView() {
     });
   };
 
+  const onChangeClient = async (clientId: string) => {
+    const board = boards.find((b) => b.id === currentBoardId);
+    if (!board) return;
+    try {
+      const { board: updated } = await api.updateBoard(board.id, { client_id: clientId || null });
+      setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to change client");
+    }
+  };
+
   const onDeleteBoard = () => {
     const board = boards.find((b) => b.id === currentBoardId);
     if (!board) return;
@@ -510,6 +530,29 @@ export function BoardView() {
   }
 
   const currentBoard = boards.find((b) => b.id === currentBoardId);
+
+  // Boards grouped by client (personal projects marked), boards without a client last.
+  const boardGroups: { key: string; label: string; boards: Board[] }[] = [];
+  for (const c of clients) {
+    const own = boards.filter((b) => b.client_id === c.id);
+    if (own.length === 0) continue;
+    boardGroups.push({
+      key: c.id,
+      label: c.is_personal ? `${c.name} · personal` : c.name,
+      boards: own,
+    });
+  }
+  const known = new Set(clients.map((c) => c.id));
+  const unassigned = boards.filter((b) => !b.client_id || !known.has(b.client_id));
+  if (unassigned.length > 0) {
+    // With no clients at all, keep the plain flat list look.
+    boardGroups.push({
+      key: "none",
+      label: boardGroups.length === 0 ? "Boards" : "No client",
+      boards: unassigned,
+    });
+  }
+
   const boardTotal = columns.reduce(
     (s, c) => s + c.tasks.reduce((ss, t) => ss + t.total_seconds, 0),
     0,
@@ -523,15 +566,37 @@ export function BoardView() {
             value={currentBoardId ?? ""}
             onChange={(e) => switchBoard(e.target.value)}
           >
-            {boards.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.name}
-              </option>
+            {boardGroups.map((g) => (
+              <optgroup key={g.key} label={g.label}>
+                {g.boards.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
           <button className="btn ghost sm" onClick={onAddBoard}>
             + Board
           </button>
+          {currentBoard && (
+            <label className="board-client" title="Client this board's time is tracked for">
+              <span className="muted">Client</span>
+              <select
+                value={currentBoard.client_id ?? ""}
+                onChange={(e) => void onChangeClient(e.target.value)}
+              >
+                <option value="">— none —</option>
+                {clients
+                  .filter((c) => !c.archived_at || c.id === currentBoard.client_id)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
           {currentBoard && (
             <button
               className="btn ghost sm"

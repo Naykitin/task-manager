@@ -4,6 +4,17 @@ import { HttpError } from "./util.ts";
 // Ownership guards. Every mutation resolves the owning user_id through the
 // board relationship and rejects anything the session user does not own.
 
+export async function assertClientOwner(
+  env: Env,
+  userId: string,
+  clientId: string,
+): Promise<void> {
+  const row = await env.DB.prepare("SELECT 1 FROM clients WHERE id = ? AND user_id = ?")
+    .bind(clientId, userId)
+    .first();
+  if (!row) throw new HttpError(404, "Client not found");
+}
+
 export async function assertBoardOwner(
   env: Env,
   userId: string,

@@ -3,6 +3,7 @@ import { requireUser } from "./auth.ts";
 import { error, HttpError, json } from "./util.ts";
 import * as authRoutes from "./routes/auth.ts";
 import * as boards from "./routes/boards.ts";
+import * as clients from "./routes/clients.ts";
 import * as tasks from "./routes/tasks.ts";
 import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
@@ -125,6 +126,16 @@ async function authedRoute(
     if (method === "GET") return boards.getBoard(b, userId, env);
     if (method === "PATCH") return boards.updateBoard(req, b, userId, env);
     if (method === "DELETE") return boards.deleteBoard(b, userId, env);
+  }
+
+  // ---- Clients ----
+  if (a === "clients" && !b) {
+    if (method === "GET") return clients.listClients(userId, env);
+    if (method === "POST") return clients.createClient(req, userId, env);
+  }
+  if (a === "clients" && b && !c) {
+    if (method === "PATCH") return clients.updateClient(req, b, userId, env);
+    if (method === "DELETE") return clients.deleteClient(b, userId, env);
   }
 
   // ---- Columns ----
