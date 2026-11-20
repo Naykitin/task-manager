@@ -19,6 +19,11 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Live sync across devices: one UserHub Durable Object per user (WebSockets).
+  "durable_objects": {
+    "bindings": [{ "name": "USER_HUB", "class_name": "UserHub" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["UserHub"] }],
   "ratelimits": [
     // Brute-force protection for login / OAuth consent: 10 attempts per minute per IP.
     { "name": "AUTH_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },

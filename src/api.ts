@@ -24,6 +24,8 @@ export interface ImportResult {
   problems: { line: number; reason: string }[];
 }
 
+import { clientId } from "./live.ts";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -37,13 +39,16 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
+  // x-client-id lets the server skip echoing our own change back to this tab.
+  const headers: Record<string, string> = {
+    "x-client-id": clientId,
+    ...(options.body != null ? { "content-type": "application/json" } : {}),
+    ...((options.headers as Record<string, string> | undefined) ?? {}),
+  };
   const res = await fetch(path, {
     credentials: "same-origin",
-    headers:
-      options.body != null
-        ? { "content-type": "application/json", ...(options.headers ?? {}) }
-        : options.headers,
     ...options,
+    headers,
   });
   if (!res.ok) {
     let message = res.statusText;

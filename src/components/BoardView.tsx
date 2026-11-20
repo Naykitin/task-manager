@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import type { Board, ColumnWithTasks, Task } from "../../shared/types.ts";
 import { api } from "../api.ts";
+import { useLive } from "../live.ts";
 import { formatDuration } from "../format.ts";
 import { COLUMN_PREFIX, ColumnView, columnSortId } from "./ColumnView.tsx";
 import { ConfirmModal } from "./ConfirmModal.tsx";
@@ -123,6 +124,37 @@ export function BoardView() {
   const reload = useCallback(async () => {
     if (currentBoardId) await loadBoard(currentBoardId);
   }, [currentBoardId, loadBoard]);
+
+  // Another device changed something: refresh quietly (never mid-drag).
+  const boardIdRef = useRef<string | null>(null);
+  boardIdRef.current = currentBoardId;
+  const draggingRef = useRef(false);
+  const syncPendingRef = useRef(false);
+
+  const syncFromServer = useCallback(async () => {
+    if (draggingRef.current) {
+      syncPendingRef.current = true;
+      return;
+    }
+    try {
+      const { boards: fresh } = await api.listBoards();
+      setBoards(fresh);
+      const cur = boardIdRef.current;
+      if (cur && fresh.some((b) => b.id === cur)) {
+        await loadBoard(cur);
+      } else if (fresh[0]) {
+        setCurrentBoardId(fresh[0].id);
+        localStorage.setItem(LAST_BOARD_KEY, fresh[0].id);
+        await loadBoard(fresh[0].id);
+      } else {
+        setCurrentBoardId(null);
+        setColumns([]);
+      }
+    } catch {
+      // transient network error: the next change or focus will retry
+    }
+  }, [loadBoard, setColumns]);
+  useLive(syncFromServer);
 
   // Initial boards load.
   useEffect(() => {
@@ -345,7 +377,16 @@ export function BoardView() {
   };
 
   // ---- Drag and drop ----
+  function finishDrag() {
+    draggingRef.current = false;
+    if (syncPendingRef.current) {
+      syncPendingRef.current = false;
+      void syncFromServer();
+    }
+  }
+
   function onDragStart(event: DragStartEvent) {
+    draggingRef.current = true;
     const id = String(event.active.id);
     if (isColumnId(id)) return;
     for (const c of columnsRef.current) {
@@ -417,6 +458,7 @@ export function BoardView() {
 
   function onDragEnd(event: DragEndEvent) {
     setActiveTask(null);
+    queueMicrotask(finishDrag);
     const { active, over } = event;
     if (!over) return;
     if (isColumnId(String(active.id))) {
@@ -543,6 +585,10 @@ export function BoardView() {
           onDragStart={onDragStart}
           onDragOver={onDragOver}
           onDragEnd={onDragEnd}
+          onDragCancel={() => {
+            setActiveTask(null);
+            finishDrag();
+          }}
         >
           <SortableContext
             items={columns.map((c) => columnSortId(c.id))}

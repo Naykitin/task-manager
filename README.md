@@ -12,6 +12,10 @@ that Claude turns into structured, reviewable tasks (**Voice Inbox**).
 - **Database:** **Cloudflare D1** (SQLite) via a Worker binding.
 - **Auth:** email + password (PBKDF2 via Web Crypto), signed JWT (`jose`) in an
   HttpOnly, Secure cookie. Registration is gated by an invite code.
+- **Live sync across devices:** every open tab/device keeps a WebSocket to a per-user
+  Durable Object (`UserHub`). When one device (or an MCP client) changes anything - starts
+  or stops a timer, moves a task, ticks a step - the others refresh instantly. Sockets
+  carry only a "changed" ping, never data; tabs also catch up on focus/reconnect.
 - **Task steps (checklist):** every task can have an ordered list of steps. Add, rename,
   reorder (drag) and delete them in the task dialog; tick them off right on the card, which
   shows a `done/total` badge and progress bar. Requires migration `0007_task_checklist.sql`
