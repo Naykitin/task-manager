@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { startLive } from "./live.ts";
 import { useAuth } from "./auth.tsx";
 import { AuthPage } from "./components/AuthPage.tsx";
 import { BoardView } from "./components/BoardView.tsx";
@@ -10,6 +11,10 @@ type View = "board" | "timesheet" | "integrations";
 export function App() {
   const { user, loading, logout } = useAuth();
   const [view, setView] = useState<View>("board");
+
+  // Keep this tab in sync with changes made on other devices.
+  const signedIn = Boolean(user);
+  useEffect(() => (signedIn ? startLive() : undefined), [signedIn]);
 
   if (loading) {
     return (

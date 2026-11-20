@@ -5,6 +5,7 @@ import { mcpChallenge } from "../oauth.ts";
 import { allow, clientIp } from "../ratelimit.ts";
 import { TOOLS, type Tool } from "./tools.ts";
 import pkg from "../../package.json";
+import { notifyUser } from "../hub.ts";
 
 // ---------------------------------------------------------------------------
 // Minimal stateless MCP server over Streamable HTTP (JSON responses only).
@@ -205,6 +206,7 @@ async function runTool(
   try {
     const result = await tool.handler(args, { env, userId: p.userId });
     audit(env, p, tool.name, true, undefined, ctx);
+    if (tool.scope !== "read") notifyUser(env, ctx, p.userId);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (e) {
     if (e instanceof HttpError) {

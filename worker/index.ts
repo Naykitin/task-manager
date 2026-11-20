@@ -14,6 +14,9 @@ import * as integrations from "./routes/integrations.ts";
 import { allow, clientIp, tooManyRequests } from "./ratelimit.ts";
 import { handleMcp } from "./mcp/server.ts";
 import { handleOAuth } from "./oauth.ts";
+import { notifyUser } from "./hub.ts";
+
+export { UserHub } from "./hub.ts";
 
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -41,7 +44,7 @@ export default {
     }
 
     try {
-      return await route(req, env, url);
+      return await route(req, env, url, ctx);
     } catch (e) {
       if (e instanceof HttpError) return error(e.status, e.message);
       console.error("Unhandled error:", e);
@@ -50,7 +53,12 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(req: Request, env: Env, url: URL): Promise<Response> {
+async function route(
+  req: Request,
+  env: Env,
+  url: URL,
+  ctx: ExecutionContext,
+): Promise<Response> {
   const method = req.method;
   // Path segments after "/api"
   const seg = url.pathname.replace(/^\/api\/?/, "").split("/").filter(Boolean);
@@ -76,6 +84,32 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
 
   // Everything below requires authentication.
   const userId = await requireUser(req, env);
+
+  // ---- Live sync socket ----
+  if (a === "live" && !b && method === "GET") {
+    if (req.headers.get("Upgrade") !== "websocket") return error(426, "Expected a WebSocket");
+    const origin = req.headers.get("Origin");
+    if (origin && origin !== url.origin) return error(403, "Origin not allowed");
+    if (!env.USER_HUB) return error(503, "Live sync is not available");
+    return env.USER_HUB.getByName(userId).fetch(req);
+  }
+
+  const res = await authedRoute(req, env, url, userId, [a, b, c, d]);
+  // Any successful change tells the user's other devices to refresh.
+  if (method !== "GET" && method !== "HEAD" && res.ok) {
+    notifyUser(env, ctx, userId, req.headers.get("x-client-id"));
+  }
+  return res;
+}
+
+async function authedRoute(
+  req: Request,
+  env: Env,
+  url: URL,
+  userId: string,
+  [a, b, c, d]: (string | undefined)[],
+): Promise<Response> {
+  const method = req.method;
 
   // ---- Boards ----
   if (a === "boards" && !b) {

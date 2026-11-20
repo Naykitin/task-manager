@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TimesheetResponse } from "../../shared/types.ts";
 import { api, type ImportResult } from "../api.ts";
+import { useLive } from "../live.ts";
 import {
   formatDate,
   formatDuration,
@@ -73,17 +74,24 @@ export function Timesheet() {
     }
   }
 
-  const load = useCallback(async (s: string, e: string) => {
-    setLoading(true);
-    setError(null);
+  const load = useCallback(async (s: string, e: string, quiet = false) => {
+    if (!quiet) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       setData(await api.timesheet(s, e));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load timesheet");
+      if (!quiet) setError(err instanceof Error ? err.message : "Failed to load timesheet");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
+
+  // Refresh the shown period (without a spinner) when another device logs time.
+  const rangeRef = useRef({ start, end });
+  rangeRef.current = { start, end };
+  useLive(() => void load(rangeRef.current.start, rangeRef.current.end, true));
 
   useEffect(() => {
     load(start, end);
