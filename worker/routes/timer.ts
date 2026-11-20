@@ -3,6 +3,7 @@ import type { TimeEntry } from "../../shared/types.ts";
 import { assertTaskOwner, assertTimeEntryOwner } from "../db.ts";
 import { HttpError, json, newId, nowIso, readJson } from "../util.ts";
 import { cappedEnd, getAutoStopHours } from "../lib/autostop.ts";
+import { clearPomodoroSession } from "../lib/pomodoro.ts";
 
 function durationSeconds(startedAt: string, endedAt: string): number {
   const secs = Math.round(
@@ -39,7 +40,7 @@ async function rateSnapshot(
 }
 
 /** Stop whatever timer the user currently has running. Returns it if any. */
-async function stopRunningForUser(
+export async function stopRunningForUser(
   env: Env,
   userId: string,
   endedAt: string,
@@ -63,16 +64,16 @@ async function stopRunningForUser(
   return { ...running, ended_at: endedAt, duration_seconds: duration };
 }
 
-/** POST /api/tasks/:id/timer/start */
-export async function startTimer(
-  taskId: string,
-  userId: string,
+/**
+ * Starts a timer on a task at `now`, first stopping whatever the user had
+ * running (a single active timer is enforced). Shared with Pomodoro focus.
+ */
+export async function openEntry(
   env: Env,
-): Promise<Response> {
-  await assertTaskOwner(env, userId, taskId);
-  const now = nowIso();
-
-  // Enforce a single active timer: stop any currently running one first.
+  userId: string,
+  taskId: string,
+  now: string,
+): Promise<{ entry: TimeEntry; stopped: TimeEntry | null }> {
   const stopped = await stopRunningForUser(env, userId, now);
 
   const id = newId();
@@ -91,6 +92,19 @@ export async function startTimer(
     ended_at: null,
     duration_seconds: null,
   };
+  return { entry, stopped };
+}
+
+/** POST /api/tasks/:id/timer/start */
+export async function startTimer(
+  taskId: string,
+  userId: string,
+  env: Env,
+): Promise<Response> {
+  await assertTaskOwner(env, userId, taskId);
+  // Starting a timer by hand ends any Pomodoro session.
+  await clearPomodoroSession(env, userId);
+  const { entry, stopped } = await openEntry(env, userId, taskId, nowIso());
   return json({ entry, stopped }, { status: 201 });
 }
 
@@ -101,6 +115,7 @@ export async function stopTimer(
   env: Env,
 ): Promise<Response> {
   await assertTaskOwner(env, userId, taskId);
+  await clearPomodoroSession(env, userId);
   const now = nowIso();
 
   const running = await env.DB.prepare(

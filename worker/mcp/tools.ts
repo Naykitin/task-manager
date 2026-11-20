@@ -6,6 +6,7 @@ import { autoStopExpired } from "../lib/autostop.ts";
 import * as boards from "../routes/boards.ts";
 import * as checklist from "../routes/checklist.ts";
 import * as clients from "../routes/clients.ts";
+import * as pomodoro from "../routes/pomodoro.ts";
 import * as tasks from "../routes/tasks.ts";
 import * as timer from "../routes/timer.ts";
 import * as timesheet from "../routes/timesheet.ts";
@@ -306,6 +307,17 @@ export const TOOLS: Tool[] = [
       if (!row) return { active: null };
       const elapsed = Math.round((Date.now() - new Date(row.started_at).getTime()) / 1000);
       return { active: { ...row, elapsed_seconds: elapsed } };
+    },
+  },
+  {
+    name: "get_pomodoro",
+    description:
+      "Current Pomodoro session (phase, status, remaining time, completed focus intervals) and the user's Pomodoro settings. session is null when none is active.",
+    scope: "read",
+    annotations: { readOnlyHint: true },
+    inputSchema: { type: "object", properties: {} },
+    async handler(_a, { env, userId }) {
+      return unwrap(await pomodoro.getPomodoro(userId, env));
     },
   },
   {
@@ -661,6 +673,10 @@ export const TOOLS: Tool[] = [
         board_id: str("Board id"),
         name: str("New board name"),
         client: str("Client id or name; 'none' to detach from any client"),
+        pomodoro_enabled: {
+          type: "boolean",
+          description: "Allow Pomodoro sessions on this board (switching off ends one running there)",
+        },
       },
       required: ["board_id"],
     },
@@ -669,6 +685,7 @@ export const TOOLS: Tool[] = [
       if (optString(a.name)) patch.name = a.name;
       const ref = optString(a.client);
       if (ref) patch.client_id = await clients.resolveClientRef(env, userId, ref);
+      if (typeof a.pomodoro_enabled === "boolean") patch.pomodoro_enabled = a.pomodoro_enabled;
       return unwrap(
         await boards.updateBoard(
           syntheticReq("PATCH", patch),
@@ -928,6 +945,45 @@ export const TOOLS: Tool[] = [
         .bind(newId(), from, to, rel)
         .run();
       return { ok: true, from_task_id: from, to_task_id: to, relation_type: rel };
+    },
+  },
+  {
+    name: "start_pomodoro",
+    description:
+      "Start a Pomodoro session: a focus interval on the task (tracked as normal time), then breaks. Only works on boards where Pomodoro is enabled (update_board pomodoro_enabled). Replaces any running timer.",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: { task_id: str("Task id") },
+      required: ["task_id"],
+    },
+    async handler(a, { env, userId }) {
+      return unwrap(
+        await pomodoro.pomodoroAction(
+          syntheticReq("POST", { task_id: requireString(a.task_id, "task_id") }),
+          "start",
+          userId,
+          env,
+        ),
+      );
+    },
+  },
+  {
+    name: "pomodoro_action",
+    description:
+      "Control the active Pomodoro session: next (start the queued phase), pause, resume, skip (end the current phase early) or stop (end the session).",
+    scope: "write",
+    inputSchema: {
+      type: "object",
+      properties: { action: { type: "string", enum: ["next", "pause", "resume", "skip", "stop"] } },
+      required: ["action"],
+    },
+    async handler(a, { env, userId }) {
+      const action = requireString(a.action, "action");
+      if (!["next", "pause", "resume", "skip", "stop"].includes(action)) {
+        throw new HttpError(400, "action must be next, pause, resume, skip or stop");
+      }
+      return unwrap(await pomodoro.pomodoroAction(syntheticReq("POST", {}), action, userId, env));
     },
   },
   {

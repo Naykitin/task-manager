@@ -20,6 +20,8 @@ interface Props {
   onDeleteColumn: (column: ColumnWithTasks) => void;
   onStart: (task: Task) => void;
   onStop: (task: Task) => void;
+  pomodoroEnabled: boolean;
+  onPomodoro: (task: Task) => void;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
   onHistory: (task: Task) => void;
@@ -36,6 +38,8 @@ export function ColumnView({
   onDeleteColumn,
   onStart,
   onStop,
+  pomodoroEnabled,
+  onPomodoro,
   onEdit,
   onDelete,
   onHistory,
@@ -111,6 +115,8 @@ export function ColumnView({
               busy={busy}
               onStart={onStart}
               onStop={onStop}
+              pomodoroEnabled={pomodoroEnabled}
+              onPomodoro={onPomodoro}
               onEdit={onEdit}
               onDelete={onDelete}
               onHistory={onHistory}

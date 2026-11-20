@@ -4,6 +4,7 @@ import { error, HttpError, json } from "./util.ts";
 import * as authRoutes from "./routes/auth.ts";
 import * as boards from "./routes/boards.ts";
 import * as clients from "./routes/clients.ts";
+import * as pomodoro from "./routes/pomodoro.ts";
 import * as tasks from "./routes/tasks.ts";
 import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
@@ -136,6 +137,12 @@ async function authedRoute(
   if (a === "clients" && b && !c) {
     if (method === "PATCH") return clients.updateClient(req, b, userId, env);
     if (method === "DELETE") return clients.deleteClient(b, userId, env);
+  }
+
+  // ---- Pomodoro ----
+  if (a === "pomodoro" && !b && method === "GET") return pomodoro.getPomodoro(userId, env);
+  if (a === "pomodoro" && b && !c && method === "POST") {
+    return pomodoro.pomodoroAction(req, b, userId, env);
   }
 
   // ---- Columns ----

@@ -150,8 +150,8 @@ If your client only supports local `stdio` subprocesses instead of HTTP:
 Or run `npm run mcp:bridge`.
 
 Tools: `list_boards`, `get_board` (`detail='summary'` for big boards), `search_tasks`,
-`get_task`, `get_active_timer`, `get_timesheet`, `list_clients` (read); `create_board`,
-`update_board` (rename / assign to a client), `create_client`, `update_client`, `create_column`, `update_column`, `move_column`, `create_task`,
+`get_task`, `get_active_timer`, `get_timesheet`, `list_clients`, `get_pomodoro` (read); `create_board`,
+`update_board` (rename / assign to a client), `create_client`, `update_client`, `start_pomodoro`, `pomodoro_action`, `create_column`, `update_column`, `move_column`, `create_task`,
 `bulk_create_tasks`, `update_task`, `move_task`, `bulk_move_tasks`, `link_tasks`,
 `unlink_tasks`, `start_timer`, `stop_timer`, `add_time_entry`, `update_time_entry`,
 `add_checklist_items`, `update_checklist_item` (write); `delete_task`, `delete_column`,

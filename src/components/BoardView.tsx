@@ -21,6 +21,7 @@ import {
 import type { Board, Client, ColumnWithTasks, Task } from "../../shared/types.ts";
 import { api } from "../api.ts";
 import { useLive } from "../live.ts";
+import { PomodoroSync, requestPomodoroNotifications } from "./PomodoroBar.tsx";
 import { formatDuration } from "../format.ts";
 import { COLUMN_PREFIX, ColumnView, columnSortId } from "./ColumnView.tsx";
 import { ConfirmModal } from "./ConfirmModal.tsx";
@@ -219,11 +220,20 @@ export function BoardView() {
   const onStart = (task: Task) =>
     withBusy(async () => {
       await api.startTimer(task.id);
+      PomodoroSync.changed(); // starting by hand ends a Pomodoro session
       await reload();
     });
   const onStop = (task: Task) =>
     withBusy(async () => {
       await api.stopTimer(task.id);
+      PomodoroSync.changed();
+      await reload();
+    });
+  const onPomodoro = (task: Task) =>
+    withBusy(async () => {
+      requestPomodoroNotifications();
+      await api.pomodoroStart(task.id);
+      PomodoroSync.changed();
       await reload();
     });
 
@@ -671,6 +681,8 @@ export function BoardView() {
                 onDeleteColumn={onDeleteColumn}
                 onStart={onStart}
                 onStop={onStop}
+                pomodoroEnabled={currentBoard.pomodoro_enabled === 1}
+                onPomodoro={onPomodoro}
                 onEdit={(task) => setModal({ mode: "edit", task })}
                 onDelete={onDeleteTask}
                 onHistory={(task) => setHistoryTask(task)}

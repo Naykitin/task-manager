@@ -179,6 +179,8 @@ export async function deleteTask(
     ),
     env.DB.prepare("DELETE FROM time_entries WHERE task_id = ?").bind(taskId),
     env.DB.prepare("DELETE FROM task_checklist_items WHERE task_id = ?").bind(taskId),
+    env.DB.prepare("DELETE FROM pomodoro_done WHERE task_id = ?").bind(taskId),
+    env.DB.prepare("DELETE FROM pomodoro_sessions WHERE task_id = ?").bind(taskId),
     env.DB.prepare("DELETE FROM tasks WHERE id = ?").bind(taskId),
   ]);
   return json({ ok: true });

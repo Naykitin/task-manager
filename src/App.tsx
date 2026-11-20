@@ -4,6 +4,7 @@ import { useAuth } from "./auth.tsx";
 import { AuthPage } from "./components/AuthPage.tsx";
 import { BoardView } from "./components/BoardView.tsx";
 import { Timesheet } from "./components/Timesheet.tsx";
+import { PomodoroBar } from "./components/PomodoroBar.tsx";
 import { Settings } from "./components/Settings.tsx";
 
 type View = "board" | "timesheet" | "settings";
@@ -62,6 +63,8 @@ export function App() {
           </button>
         </div>
       </header>
+
+      <PomodoroBar />
 
       <main className="main">
         {view === "board" && <BoardView />}

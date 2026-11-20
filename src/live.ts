@@ -19,6 +19,9 @@ function emit() {
   }
 }
 
+/** Tell this tab's own subscribers that data changed here (the server only echoes to other tabs). */
+export const notifyLocal = emit;
+
 export function subscribeLive(fn: Listener): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
