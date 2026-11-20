@@ -23,6 +23,7 @@ import { api } from "../api.ts";
 import { formatDuration } from "../format.ts";
 import { COLUMN_PREFIX, ColumnView, columnSortId } from "./ColumnView.tsx";
 import { ConfirmModal } from "./ConfirmModal.tsx";
+import { InputModal } from "./InputModal.tsx";
 import { TaskModal } from "./TaskModal.tsx";
 import { TimeLogModal } from "./TimeLogModal.tsx";
 import { VoiceInbox } from "./VoiceInbox.tsx";
@@ -79,6 +80,16 @@ export function BoardView() {
     { title: string; message: string; onConfirm: () => void } | null
   >(null);
   const closeConfirm = () => setConfirmModal(null);
+  const [inputModal, setInputModal] = useState<
+    | {
+        title: string;
+        label: string;
+        submitLabel: string;
+        initial?: string;
+        onSubmit: (value: string) => Promise<void>;
+      }
+    | null
+  >(null);
 
   const setColumns = useCallback((next: ColumnWithTasks[]) => {
     columnsRef.current = next;
@@ -215,21 +226,31 @@ export function BoardView() {
   };
 
   // ---- Columns ----
-  const onAddColumn = () =>
-    withBusy(async () => {
-      if (!currentBoardId) return;
-      const name = prompt("New column name:");
-      if (!name?.trim()) return;
-      await api.createColumn(currentBoardId, name.trim());
-      await reload();
+  const onAddColumn = () => {
+    const boardId = currentBoardId;
+    if (!boardId) return;
+    setInputModal({
+      title: "New column",
+      label: "Column name",
+      submitLabel: "Create",
+      onSubmit: async (name) => {
+        await api.createColumn(boardId, name);
+        await reload();
+      },
     });
+  };
 
   const onRenameColumn = (column: ColumnWithTasks) =>
-    withBusy(async () => {
-      const name = prompt("Rename column:", column.name);
-      if (!name?.trim() || name.trim() === column.name) return;
-      await api.updateColumn(column.id, { name: name.trim() });
-      await reload();
+    setInputModal({
+      title: "Rename column",
+      label: "Column name",
+      submitLabel: "Save",
+      initial: column.name,
+      onSubmit: async (name) => {
+        if (name === column.name) return;
+        await api.updateColumn(column.id, { name });
+        await reload();
+      },
     });
 
   const onDeleteColumn = (column: ColumnWithTasks) => {
@@ -247,25 +268,32 @@ export function BoardView() {
   };
 
   const onAddBoard = () =>
-    withBusy(async () => {
-      const name = prompt("New board name:");
-      if (!name?.trim()) return;
-      const { board } = await api.createBoard(name.trim());
-      setBoards((b) => [...b, board]);
-      await switchBoard(board.id);
+    setInputModal({
+      title: "New board",
+      label: "Board name",
+      submitLabel: "Create",
+      onSubmit: async (name) => {
+        const { board } = await api.createBoard(name);
+        setBoards((b) => [...b, board]);
+        await switchBoard(board.id);
+      },
     });
 
-  const onRenameBoard = () =>
-    withBusy(async () => {
-      const board = boards.find((b) => b.id === currentBoardId);
-      if (!board) return;
-      const name = prompt("Rename board:", board.name);
-      if (!name?.trim() || name.trim() === board.name) return;
-      const { board: updated } = await api.updateBoard(board.id, {
-        name: name.trim(),
-      });
-      setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)));
+  const onRenameBoard = () => {
+    const board = boards.find((b) => b.id === currentBoardId);
+    if (!board) return;
+    setInputModal({
+      title: "Rename board",
+      label: "Board name",
+      submitLabel: "Save",
+      initial: board.name,
+      onSubmit: async (name) => {
+        if (name === board.name) return;
+        const { board: updated } = await api.updateBoard(board.id, { name });
+        setBoards((bs) => bs.map((b) => (b.id === updated.id ? updated : b)));
+      },
     });
+  };
 
   const onDeleteBoard = () => {
     const board = boards.find((b) => b.id === currentBoardId);
@@ -542,6 +570,16 @@ export function BoardView() {
           task={historyTask}
           onClose={() => setHistoryTask(null)}
           onChange={reload}
+        />
+      )}
+      {inputModal && (
+        <InputModal
+          title={inputModal.title}
+          label={inputModal.label}
+          submitLabel={inputModal.submitLabel}
+          initial={inputModal.initial}
+          onCancel={() => setInputModal(null)}
+          onSubmit={inputModal.onSubmit}
         />
       )}
       {confirmModal && (
