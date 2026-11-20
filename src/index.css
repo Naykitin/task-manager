@@ -1203,3 +1203,189 @@ input[type="datetime-local"]:focus {
 .int-scopes { display: flex; gap: .9rem; color: var(--text-dim); }
 .int-newkey { display: grid; gap: .5rem; padding: .8rem; margin-bottom: .8rem; border: 1px solid var(--amber); border-radius: 8px; background: var(--bg-elev); }
 .int-revoked { opacity: .5; }
+/* ---------- Settings ---------- */
+.icon-btn.gear {
+  font-size: 18px;
+  line-height: 1;
+}
+.icon-btn.gear.active {
+  color: var(--accent);
+}
+.settings {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+  max-width: 1100px;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-tab {
+  text-align: left;
+  background: none;
+  border: 0;
+  color: var(--text-dim);
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.settings-tab:hover {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+.settings-tab.active {
+  background: var(--bg-elev-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.settings-card {
+  background: var(--panel);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.settings-card h3,
+.settings-card h4,
+.settings-card p {
+  margin: 0;
+}
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+.settings-form .field {
+  width: 100%;
+  max-width: 380px;
+  margin-bottom: 0;
+}
+.switch-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+.switch-row input {
+  margin-top: 4px;
+}
+.switch-row small {
+  display: block;
+  color: var(--text-dim);
+}
+.key-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.key-row input {
+  flex: 1;
+  min-width: 220px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  outline: none;
+}
+.settings-ok {
+  background: rgba(47, 191, 143, 0.12);
+  border: 1px solid rgba(47, 191, 143, 0.35);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+.settings-note {
+  background: rgba(226, 160, 63, 0.12);
+  border: 1px solid rgba(226, 160, 63, 0.35);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.settings-note code,
+.settings-card code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg-elev);
+  border-radius: 6px;
+  padding: 2px 6px;
+  word-break: break-all;
+}
+.settings-actions,
+.theme-options {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.settings-actions .btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+@media (max-width: 720px) {
+  .settings {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+  .settings-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .settings-tab {
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Light theme ---------- */
+:root {
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f9;
+  --bg-elev: #ffffff;
+  --bg-elev-2: #e9eef4;
+  --panel: #ffffff;
+  --border: #cfd7e1;
+  --border-soft: #dfe5ec;
+  --text: #1a2330;
+  --text-dim: #4c5b6b;
+  --text-faint: #75838f;
+  --accent: #4059d8;
+  --accent-2: #5e50d6;
+  --shadow: 0 6px 20px rgba(26, 35, 48, 0.12);
+}
+:root[data-theme="light"] body {
+  background: var(--bg);
+}
+:root[data-theme="light"] .field input,
+:root[data-theme="light"] .field textarea,
+:root[data-theme="light"] select,
+:root[data-theme="light"] input[type="date"],
+:root[data-theme="light"] input[type="datetime-local"] {
+  color-scheme: light;
+}
+:root[data-theme="light"] .btn.accent {
+  color: #0b6b4d;
+  background: rgba(47, 191, 143, 0.16);
+}
+:root[data-theme="light"] .btn.danger,
+:root[data-theme="light"] .auth-error,
+:root[data-theme="light"] .banner-error {
+  color: #b3202d;
+}
+:root[data-theme="light"] .topbar {
+  background: rgba(255, 255, 255, 0.85);
+}

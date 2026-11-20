@@ -9,6 +9,8 @@ import * as timesheet from "./routes/timesheet.ts";
 import * as voice from "./routes/voice.ts";
 import * as backup from "./routes/backup.ts";
 import * as checklist from "./routes/checklist.ts";
+import * as settings from "./routes/settings.ts";
+import * as account from "./routes/account.ts";
 import * as apikeys from "./apikeys.ts";
 import * as integrations from "./routes/integrations.ts";
 import { allow, clientIp, tooManyRequests } from "./ratelimit.ts";
@@ -181,6 +183,23 @@ async function authedRoute(
     return timer.createManualEntry(req, b, userId, env);
   }
 
+  // ---- Settings & account ----
+  if (a === "settings" && !b) {
+    if (method === "GET") return settings.getSettings(userId, env);
+    if (method === "PATCH") return settings.updateSettings(req, userId, env);
+  }
+  if (a === "settings" && b === "anthropic-key" && !c) {
+    if (method === "PUT") return settings.saveAnthropicKey(req, userId, env);
+    if (method === "DELETE") return settings.deleteAnthropicKey(userId, env);
+  }
+  if (a === "account" && b === "password" && !c && method === "POST") {
+    if (!(await allow(env.AUTH_LIMITER, `pw:${userId}`))) return tooManyRequests();
+    return account.changePassword(req, userId, env);
+  }
+  if (a === "account" && b === "sign-out-everywhere" && !c && method === "POST") {
+    return account.signOutEverywhere(userId, env);
+  }
+
   // ---- Checklist ----
   if (a === "tasks" && b && c === "checklist" && !d) {
     if (method === "POST") return checklist.createItems(req, b, userId, env);
@@ -195,10 +214,10 @@ async function authedRoute(
 
   // ---- Voice notes ----
   if (a === "voice-notes" && b === "availability" && !c && method === "GET") {
-    return voice.getVoiceAvailability(env);
+    return voice.getVoiceAvailability(env, userId);
   }
-  if (a === "voice-notes" && !voice.isVoiceInboxEnabled(env)) {
-    return json({ error: "Voice Inbox is disabled" }, { status: 404 });
+  if (a === "voice-notes" && !(await settings.isVoiceEnabled(env, userId))) {
+    return json({ error: "Voice Inbox is turned off (Settings > AI & Voice)" }, { status: 404 });
   }
   if (a === "voice-notes" && !b) {
     if (method === "GET") return voice.listVoiceNotes(url, userId, env);

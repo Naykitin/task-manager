@@ -2,6 +2,7 @@ import type { Env } from "../env.ts";
 import type { Scope } from "../apikeys.ts";
 import { assertColumnOwner, assertTaskOwner } from "../db.ts";
 import { HttpError, newId, requireString } from "../util.ts";
+import { autoStopExpired } from "../lib/autostop.ts";
 import * as boards from "../routes/boards.ts";
 import * as checklist from "../routes/checklist.ts";
 import * as tasks from "../routes/tasks.ts";
@@ -263,6 +264,7 @@ export const TOOLS: Tool[] = [
     annotations: { readOnlyHint: true },
     inputSchema: { type: "object", properties: {} },
     async handler(_a, { env, userId }) {
+      await autoStopExpired(env, userId);
       const row = await env.DB.prepare(
         `SELECT te.id AS entry_id, te.started_at, t.id AS task_id, t.title AS task_title,
                 b.id AS board_id, b.name AS board_name

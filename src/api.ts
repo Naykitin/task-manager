@@ -26,6 +26,13 @@ export interface ImportResult {
 
 import { clientId } from "./live.ts";
 
+export interface AppSettings {
+  voice_enabled: boolean;
+  auto_stop_hours: number;
+  anthropic: { configured: boolean; source: "user" | "server" | null; last4: string | null };
+  encryption_available: boolean;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -200,6 +207,25 @@ export const api = {
     }),
   discardVoiceNote: (id: string) =>
     request<{ ok: true }>(`/api/voice-notes/${id}/discard`, { method: "POST" }),
+
+  // ---- Settings & account ----
+  getSettings: () => request<AppSettings>("/api/settings"),
+  updateSettings: (patch: { voice_enabled?: boolean; auto_stop_hours?: number }) =>
+    request<AppSettings>("/api/settings", { method: "PATCH", body: JSON.stringify(patch) }),
+  saveAnthropicKey: (key: string) =>
+    request<AppSettings>("/api/settings/anthropic-key", {
+      method: "PUT",
+      body: JSON.stringify({ key }),
+    }),
+  deleteAnthropicKey: () =>
+    request<AppSettings>("/api/settings/anthropic-key", { method: "DELETE" }),
+  changePassword: (current_password: string, new_password: string) =>
+    request<{ ok: true }>("/api/account/password", {
+      method: "POST",
+      body: JSON.stringify({ current_password, new_password }),
+    }),
+  signOutEverywhere: () =>
+    request<{ ok: true }>("/api/account/sign-out-everywhere", { method: "POST" }),
 
   // ---- Time entry backup ----
   timeEntriesExportUrl: "/api/time-entries/export",

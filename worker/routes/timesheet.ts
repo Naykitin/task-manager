@@ -5,6 +5,7 @@ import type {
   TimesheetTaskRow,
 } from "../../shared/types.ts";
 import { HttpError, json } from "../util.ts";
+import { autoStopExpired } from "../lib/autostop.ts";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -28,6 +29,7 @@ async function computeTimesheet(
   userId: string,
   env: Env,
 ): Promise<TimesheetResponse> {
+  await autoStopExpired(env, userId);
   const start = url.searchParams.get("start") ?? "";
   const end = url.searchParams.get("end") ?? "";
   if (!DATE_RE.test(start) || !DATE_RE.test(end)) {

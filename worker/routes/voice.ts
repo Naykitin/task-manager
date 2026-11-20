@@ -2,30 +2,21 @@ import type { Env } from "../env.ts";
 import type { ApplyLinkInput, ApplyNewTaskInput, VoiceNote } from "../../shared/types.ts";
 import { buildInsertTaskStmt, getProjectSnapshot, loadTask } from "./tasks.ts";
 import { structureTranscript } from "../lib/structuring.ts";
+import { isVoiceEnabled, resolveAnthropicKey } from "./settings.ts";
 import { HttpError, json, newId, nowIso, readJson, requireString } from "../util.ts";
 
 const RELATION_TYPES = ["blocks", "related", "duplicate"];
 const DIRECTIONS = ["this_blocks_that", "that_blocks_this"];
 
 /**
- * Voice-note structuring calls the Claude API, which needs an API key that
- * isn't part of this open-source repo. A self-hosted deployment without one
- * configured should get a clear, actionable error instead of a cryptic 401
- * from Anthropic — and the frontend should be able to check this up front
- * instead of only finding out after the user has typed a transcript.
+ * GET /api/voice-notes/availability - whether this user can use Voice Inbox:
+ * they must have switched it on in Settings AND an Anthropic key must be
+ * available (their own saved key, or the server-wide secret).
  */
-function isVoiceStructuringAvailable(env: Env): boolean {
-  return isVoiceInboxEnabled(env) && Boolean(env.ANTHROPIC_API_KEY && env.ANTHROPIC_API_KEY.trim());
-}
-
-/** Feature flag (wrangler.jsonc vars). Off by default; code and tables are kept. */
-export function isVoiceInboxEnabled(env: Env): boolean {
-  return env.VOICE_INBOX_ENABLED === "true";
-}
-
-/** GET /api/voice-notes/availability — whether Claude structuring is configured. */
-export async function getVoiceAvailability(env: Env): Promise<Response> {
-  return json({ available: isVoiceStructuringAvailable(env) });
+export async function getVoiceAvailability(env: Env, userId: string): Promise<Response> {
+  const available =
+    (await isVoiceEnabled(env, userId)) && (await resolveAnthropicKey(env, userId)) !== null;
+  return json({ available });
 }
 
 /** POST /api/voice-notes — store a raw transcript, status starts as 'pending'. */
@@ -178,11 +169,11 @@ export async function structureVoiceNote(
   userId: string,
   env: Env,
 ): Promise<Response> {
-  if (!isVoiceStructuringAvailable(env)) {
+  const resolved = await resolveAnthropicKey(env, userId);
+  if (!resolved) {
     throw new HttpError(
       503,
-      "Voice/text task creation is disabled on this server: no ANTHROPIC_API_KEY is configured. " +
-        "Set one via `wrangler secret put ANTHROPIC_API_KEY` (or ANTHROPIC_API_KEY in .dev.vars for local dev) to enable it.",
+      "No Anthropic API key is configured. Add one in Settings > AI & Voice.",
     );
   }
 
@@ -202,7 +193,7 @@ export async function structureVoiceNote(
     ),
   };
 
-  const result = await structureTranscript(note.transcript, boardSnapshot, env, board.name);
+  const result = await structureTranscript(note.transcript, boardSnapshot, resolved.key, board.name);
   return json(result);
 }
 
