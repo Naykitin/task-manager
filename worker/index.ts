@@ -7,6 +7,7 @@ import * as tasks from "./routes/tasks.ts";
 import * as timer from "./routes/timer.ts";
 import * as timesheet from "./routes/timesheet.ts";
 import * as voice from "./routes/voice.ts";
+import * as backup from "./routes/backup.ts";
 import * as apikeys from "./apikeys.ts";
 import * as integrations from "./routes/integrations.ts";
 import { allow, clientIp, tooManyRequests } from "./ratelimit.ts";
@@ -164,6 +165,14 @@ async function route(req: Request, env: Env, url: URL): Promise<Response> {
   }
   if (a === "voice-notes" && b && c === "discard" && method === "POST") {
     return voice.discardVoiceNote(b, userId, env);
+  }
+
+  // ---- Time entry backup (CSV) ----
+  if (a === "time-entries" && b === "export" && !c && method === "GET") {
+    return backup.exportTimeEntriesCsv(userId, env);
+  }
+  if (a === "time-entries" && b === "import" && !c && method === "POST") {
+    return backup.importTimeEntriesCsv(req, userId, env);
   }
 
   // ---- Time entries (direct edit/delete by id) ----
